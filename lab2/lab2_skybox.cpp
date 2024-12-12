@@ -6,14 +6,16 @@
 #include <render/shader.h>
 #include <random>
 #include <ctime> // Add this for time()
+#include <fstream>   // For file streams like std::ifstream
+#include <sstream>   // For std::istringstream
+#include <vector>    // For std::vector
+#include <string>    // For std::string
+#include <glm/vec3.hpp> // For glm::vec3
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb/stb_image.h>
-#include <vector>
-#include <iostream>
 #define _USE_MATH_DEFINES
 #include <math.h>
-
 
 static GLFWwindow *window;
 static void key_callback(GLFWwindow *window, int key, int scancode, int action, int mode);
@@ -28,6 +30,38 @@ static glm::vec3 lastLookat = lookat; // Store the last known lookat value
 static float viewAzimuth = 0.f;
 static float viewPolar = 0.f;
 static float viewDistance = 800.0f;
+void loadOBJ(const char* filepath, std::vector<GLfloat>& vertices, std::vector<GLuint>& indices) {
+	std::ifstream file(filepath);
+	if (!file.is_open()) {
+		std::cerr << "Error: Cannot open OBJ file " << filepath << std::endl;
+		return;
+	}
+
+	std::string line;
+	std::vector<glm::vec3> temp_vertices;
+	while (std::getline(file, line)) {
+		std::istringstream ss(line);
+		std::string prefix;
+		ss >> prefix;
+		if (prefix == "v") {
+			glm::vec3 vertex;
+			ss >> vertex.x >> vertex.y >> vertex.z;
+			temp_vertices.push_back(vertex);
+		}
+		else if (prefix == "f") {
+			GLuint vertexIndex[3];
+			for (int i = 0; i < 3; i++) {
+				ss >> vertexIndex[i];
+				indices.push_back(vertexIndex[i] - 1); // OBJ is 1-based
+			}
+		}
+	}
+	for (const auto& v : temp_vertices) {
+		vertices.push_back(v.x);
+		vertices.push_back(v.y);
+		vertices.push_back(v.z);
+	}
+}
 
 static GLuint LoadTextureTileBox(const char *texture_file_path) {
     int w, h, channels;

@@ -1,0 +1,20 @@
+# ninja log v6
+6	784	7547143853997418	external/glad-3.3/CMakeFiles/glad.dir/src/gl.c.obj	d4604ce982e9ccec
+58	1681	7547143854504213	external/glfw-3.1.2/src/CMakeFiles/glfw.dir/win32_time.c.obj	665ed610944ee862
+19	1695	7547143854122795	external/glfw-3.1.2/src/CMakeFiles/glfw.dir/init.c.obj	2e50797b2f517eb2
+81	1702	7547143854750278	external/glfw-3.1.2/src/CMakeFiles/glfw.dir/winmm_joystick.c.obj	29eca429ee1bb935
+13	1721	7547143854062598	external/glfw-3.1.2/src/CMakeFiles/glfw.dir/context.c.obj	fb2b194d893e2a0f
+66	1732	7547143854585058	external/glfw-3.1.2/src/CMakeFiles/glfw.dir/win32_tls.c.obj	fbf6593d1bba159
+37	1735	7547143854293502	external/glfw-3.1.2/src/CMakeFiles/glfw.dir/window.c.obj	4a1de78e5c0c6b0b
+24	1738	7547143854167925	external/glfw-3.1.2/src/CMakeFiles/glfw.dir/input.c.obj	ccf1780cfb05a71c
+30	1756	7547143854228106	external/glfw-3.1.2/src/CMakeFiles/glfw.dir/monitor.c.obj	ba295ed21ae0ab81
+51	1761	7547143854438846	external/glfw-3.1.2/src/CMakeFiles/glfw.dir/win32_monitor.c.obj	62cc78f6b7186e3a
+43	1772	7547143854363480	external/glfw-3.1.2/src/CMakeFiles/glfw.dir/win32_init.c.obj	e3d10f21f2a9a5c9
+89	1787	7547143854825833	external/glfw-3.1.2/src/CMakeFiles/glfw.dir/wgl_context.c.obj	b5cd24f889df0686
+74	1843	7547143854669995	external/glfw-3.1.2/src/CMakeFiles/glfw.dir/win32_window.c.obj	60fa65049e78f0af
+1683	1914	7547143870762571	libglad.a	b0ee27fe87273622
+1843	2041	7547143874251673	glfw3.dll	1008916fce49b5ee
+1843	2041	7547143874251673	glfw3dll.a	1008916fce49b5ee
+786	2159	7547143861792443	CMakeFiles/lab2_building.dir/lab2/render/shader.cpp.obj	429ac9f1987c245
+96	3194	7547143854891207	CMakeFiles/lab2_building.dir/lab2/lab2_building.cpp.obj	f4223b99703e5522
+3194	3332	7547143885872176	lab2_building.exe	7d5bfc95bc995347

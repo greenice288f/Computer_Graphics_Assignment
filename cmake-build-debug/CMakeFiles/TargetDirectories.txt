@@ -1,0 +1,13 @@
+C:/Users/balin/Desktop/graphProject/lab2/cmake-build-debug/CMakeFiles/lab2_building.dir
+C:/Users/balin/Desktop/graphProject/lab2/cmake-build-debug/CMakeFiles/edit_cache.dir
+C:/Users/balin/Desktop/graphProject/lab2/cmake-build-debug/CMakeFiles/rebuild_cache.dir
+C:/Users/balin/Desktop/graphProject/lab2/cmake-build-debug/external/CMakeFiles/edit_cache.dir
+C:/Users/balin/Desktop/graphProject/lab2/cmake-build-debug/external/CMakeFiles/rebuild_cache.dir
+C:/Users/balin/Desktop/graphProject/lab2/cmake-build-debug/external/glad-3.3/CMakeFiles/glad.dir
+C:/Users/balin/Desktop/graphProject/lab2/cmake-build-debug/external/glad-3.3/CMakeFiles/edit_cache.dir
+C:/Users/balin/Desktop/graphProject/lab2/cmake-build-debug/external/glad-3.3/CMakeFiles/rebuild_cache.dir
+C:/Users/balin/Desktop/graphProject/lab2/cmake-build-debug/external/glfw-3.1.2/CMakeFiles/edit_cache.dir
+C:/Users/balin/Desktop/graphProject/lab2/cmake-build-debug/external/glfw-3.1.2/CMakeFiles/rebuild_cache.dir
+C:/Users/balin/Desktop/graphProject/lab2/cmake-build-debug/external/glfw-3.1.2/src/CMakeFiles/glfw.dir
+C:/Users/balin/Desktop/graphProject/lab2/cmake-build-debug/external/glfw-3.1.2/src/CMakeFiles/edit_cache.dir
+C:/Users/balin/Desktop/graphProject/lab2/cmake-build-debug/external/glfw-3.1.2/src/CMakeFiles/rebuild_cache.dir

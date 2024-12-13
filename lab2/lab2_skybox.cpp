@@ -30,7 +30,8 @@ static glm::vec3 lastLookat = lookat; // Store the last known lookat value
 static float viewAzimuth = 0.f;
 static float viewPolar = 0.f;
 static float viewDistance = 800.0f;
-void loadOBJ(const char* filepath, std::vector<GLfloat>& vertices, std::vector<GLuint>& indices) {
+void loadOBJ(const char* filepath, std::vector<GLfloat>& vertices,
+	std::vector<GLfloat>& uvs, std::vector<GLuint>& indices) {
 	std::ifstream file(filepath);
 	if (!file.is_open()) {
 		std::cerr << "Error: Cannot open OBJ file " << filepath << std::endl;
@@ -39,23 +40,39 @@ void loadOBJ(const char* filepath, std::vector<GLfloat>& vertices, std::vector<G
 
 	std::string line;
 	std::vector<glm::vec3> temp_vertices;
+	std::vector<glm::vec2> temp_uvs;
+
 	while (std::getline(file, line)) {
 		std::istringstream ss(line);
 		std::string prefix;
 		ss >> prefix;
-		if (prefix == "v") {
+
+		if (prefix == "v") { // Vertex
 			glm::vec3 vertex;
 			ss >> vertex.x >> vertex.y >> vertex.z;
 			temp_vertices.push_back(vertex);
 		}
-		else if (prefix == "f") {
-			GLuint vertexIndex[3];
-			for (int i = 0; i < 3; i++) {
-				ss >> vertexIndex[i];
-				indices.push_back(vertexIndex[i] - 1); // OBJ is 1-based
+		else if (prefix == "vt") { // Texture coordinate
+			glm::vec2 uv;
+			ss >> uv.x >> uv.y;
+			temp_uvs.push_back(uv);
+		}
+		else if (prefix == "f") { // Face
+			GLuint vertexIndex[3], uvIndex[3];
+			char separator;
+			for (int i = 0; i < 3; ++i) {
+				ss >> vertexIndex[i] >> separator >> uvIndex[i];
+				indices.push_back(vertexIndex[i] - 1); // OBJ indices are 1-based
+			}
+
+			for (int i = 0; i < 3; ++i)
+			{
+				uvs.push_back(temp_uvs[uvIndex[i] - 1].x);
+				uvs.push_back(temp_uvs[uvIndex[i] - 1].y);
 			}
 		}
 	}
+
 	for (const auto& v : temp_vertices) {
 		vertices.push_back(v.x);
 		vertices.push_back(v.y);
@@ -88,7 +105,99 @@ static GLuint LoadTextureTileBox(const char *texture_file_path) {
 
     return texture;
 }
+struct RandomObject {
+	std::vector<GLfloat> vertices;
+	std::vector<GLfloat> uvs;
+	std::vector<GLuint> indices;
+	glm::vec3 position;
+	glm::vec3 scale;
+	char* texture;
 
+	GLuint vertexArrayID;
+	GLuint vertexBufferID;
+	GLuint uvBufferID;
+	GLuint indexBufferID;
+	GLuint textureID;
+	GLuint mvpMatrixID;
+	GLuint textureSamplerID;
+	GLuint programID;
+
+	void initialize(glm::vec3 position, glm::vec3 scale, char* texturePath, const char* objPath) {
+		this->position = position;
+		this->scale = scale;
+		this->texture = texturePath;
+		loadOBJ(objPath, vertices, uvs, indices);
+		// Create VAO
+		glGenVertexArrays(1, &vertexArrayID);
+		glBindVertexArray(vertexArrayID);
+		// Create vertex buffer
+		glGenBuffers(1, &vertexBufferID);
+		glBindBuffer(GL_ARRAY_BUFFER, vertexBufferID);
+		glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(GLfloat), vertices.data(), GL_STATIC_DRAW);
+
+		// Create UV buffer
+		glGenBuffers(1, &uvBufferID);
+		glBindBuffer(GL_ARRAY_BUFFER, uvBufferID);
+		glBufferData(GL_ARRAY_BUFFER, uvs.size() * sizeof(GLfloat), uvs.data(), GL_STATIC_DRAW);
+
+		// Index buffer
+		glGenBuffers(1, &indexBufferID);
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBufferID);
+		glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(GLuint), indices.data(), GL_STATIC_DRAW);
+
+		// Load texture
+		textureID = LoadTextureTileBox(texture);
+
+		// Load shaders
+		programID = LoadShadersFromFile("../../../lab2/box.vert", "../../../lab2/box.frag");
+		mvpMatrixID = glGetUniformLocation(programID, "MVP");
+		textureSamplerID = glGetUniformLocation(programID, "textureSampler");
+	}
+
+	void render(glm::mat4 cameraMatrix) {
+		glUseProgram(programID);
+
+		// Bind vertex buffer
+		glEnableVertexAttribArray(0);
+		glBindBuffer(GL_ARRAY_BUFFER, vertexBufferID);
+		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
+
+		// Bind UV buffer
+		glEnableVertexAttribArray(2);
+		glBindBuffer(GL_ARRAY_BUFFER, uvBufferID);
+		glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 0, 0);
+
+		// Bind index buffer
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBufferID);
+
+		glm::mat4 modelMatrix = glm::mat4();
+		modelMatrix = glm::translate(modelMatrix, position);
+		modelMatrix = glm::scale(modelMatrix, scale);
+
+		glm::mat4 mvp = cameraMatrix * modelMatrix;
+		glUniformMatrix4fv(mvpMatrixID, 1, GL_FALSE, &mvp[0][0]);
+
+		// Bind texture
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, textureID);
+		glUniform1i(textureSamplerID, 0);
+
+		glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, 0);
+
+		// Disable vertex attributes
+		glDisableVertexAttribArray(0);
+		glDisableVertexAttribArray(2);
+	}
+
+	void cleanup() {
+		glDeleteBuffers(1, &vertexBufferID);
+		glDeleteBuffers(1, &uvBufferID);
+		glDeleteBuffers(1, &indexBufferID);
+		glDeleteVertexArrays(1, &vertexArrayID);
+		glDeleteProgram(programID);
+	}
+
+};
 struct skyBox {
 	glm::vec3 position;		// Position of the box
 	glm::vec3 scale;		// Size of the box in each axis
@@ -880,6 +989,9 @@ int main(void)
 	}
 
 
+	//--------------------------------------------idk
+	RandomObject randomObject;
+	randomObject.initialize(glm::vec3(0, 0, 0), glm::vec3(50, 50, 50), "../../../lab2/facade1.jpg", "../../../lab2/tinker.obj");
 
 
 	// Camera setup

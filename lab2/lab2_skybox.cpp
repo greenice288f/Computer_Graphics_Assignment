@@ -1019,24 +1019,24 @@ int main(void)
 
 		glm::mat4 vp = projectionMatrix * viewMatrix;
 
-		// Render the building
-		glm::mat4 viewMatrixSkybox = glm::mat4(glm::mat3(viewMatrix)); // Remove translation
-		glm::mat4 vpSkybox = projectionMatrix * viewMatrixSkybox;
-		glDepthFunc(GL_LEQUAL);
-		glDepthMask(GL_FALSE);
-		skybox.render(vpSkybox);
-		glDepthMask(GL_TRUE);
-		glDepthFunc(GL_LESS);
-		for (size_t i = 0; i < buildings.size(); ++i) {
-			buildings[i].render(vp);
-		}
+		//// Render the building
+		//glm::mat4 viewMatrixSkybox = glm::mat4(glm::mat3(viewMatrix)); // Remove translation
+		//glm::mat4 vpSkybox = projectionMatrix * viewMatrixSkybox;
+		//glDepthFunc(GL_LEQUAL);
+		//glDepthMask(GL_FALSE);
+		//skybox.render(vpSkybox);
+		//glDepthMask(GL_TRUE);
+		//glDepthFunc(GL_LESS);
+		//for (size_t i = 0; i < buildings.size(); ++i) {
+		//	buildings[i].render(vp);
+		//}
 		
 
-		glm::mat4 viewMatrixClouds = glm::mat4(glm::mat3(viewMatrix)); // Strip translation
-		glm::mat4 vpClouds = projectionMatrix * viewMatrixClouds;
-		for (auto& cloud : clouds) {
-			cloud.render(vpClouds);
-		}
+		//glm::mat4 viewMatrixClouds = glm::mat4(glm::mat3(viewMatrix)); // Strip translation
+		//glm::mat4 vpClouds = projectionMatrix * viewMatrixClouds;
+		//for (auto& cloud : clouds) {
+		//	cloud.render(vpClouds);
+		//}
 
 		// Swap buffers
 		glfwSwapBuffers(window);

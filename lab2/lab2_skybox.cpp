@@ -29,7 +29,7 @@ static glm::vec3 lastLookat = lookat; // Store the last known lookat value
 // View control
 static float viewAzimuth = 0.f;
 static float viewPolar = 0.f;
-static float viewDistance = 800.0f;
+static float viewDistance = 3000.0f;
 void loadOBJ(const char* filepath, std::vector<GLfloat>& vertices,
 	std::vector<GLfloat>& uvs, std::vector<GLuint>& indices) {
 	std::ifstream file(filepath);
@@ -41,8 +41,11 @@ void loadOBJ(const char* filepath, std::vector<GLfloat>& vertices,
 	std::string line;
 	std::vector<glm::vec3> temp_vertices;
 	std::vector<glm::vec2> temp_uvs;
+	bool hasUVs = false;
 
 	while (std::getline(file, line)) {
+		std::cout << "Read line: " << line << std::endl; // Print the current line
+
 		std::istringstream ss(line);
 		std::string prefix;
 		ss >> prefix;
@@ -56,19 +59,32 @@ void loadOBJ(const char* filepath, std::vector<GLfloat>& vertices,
 			glm::vec2 uv;
 			ss >> uv.x >> uv.y;
 			temp_uvs.push_back(uv);
+			hasUVs = true; // Set the flag since we found a vt line
 		}
 		else if (prefix == "f") { // Face
 			GLuint vertexIndex[3], uvIndex[3];
 			char separator;
-			for (int i = 0; i < 3; ++i) {
-				ss >> vertexIndex[i] >> separator >> uvIndex[i];
-				indices.push_back(vertexIndex[i] - 1); // OBJ indices are 1-based
-			}
+			if (hasUVs) {
+				for (int i = 0; i < 3; ++i) {
+					ss >> vertexIndex[i] >> separator >> uvIndex[i];
+					indices.push_back(vertexIndex[i] - 1);
+				}
 
-			for (int i = 0; i < 3; ++i)
-			{
-				uvs.push_back(temp_uvs[uvIndex[i] - 1].x);
-				uvs.push_back(temp_uvs[uvIndex[i] - 1].y);
+				for (int i = 0; i < 3; ++i)
+				{
+					uvs.push_back(temp_uvs[uvIndex[i] - 1].x);
+					uvs.push_back(temp_uvs[uvIndex[i] - 1].y);
+				}
+			}
+			else {
+				for (int i = 0; i < 3; ++i) {
+					ss >> vertexIndex[i];
+					indices.push_back(vertexIndex[i] - 1);
+				}
+				for (int i = 0; i < 3; i++) {
+					uvs.push_back(0.0f);
+					uvs.push_back(0.0f);
+				}
 			}
 		}
 	}
@@ -105,99 +121,138 @@ static GLuint LoadTextureTileBox(const char *texture_file_path) {
 
     return texture;
 }
-struct RandomObject {
+
+struct Object {
+    glm::vec3 position;
+    glm::vec3 scale;
+    char* texture;
 	std::vector<GLfloat> vertices;
 	std::vector<GLfloat> uvs;
 	std::vector<GLuint> indices;
-	glm::vec3 position;
-	glm::vec3 scale;
-	char* texture;
+    std::vector<GLfloat> colors; // Added color vector
 
-	GLuint vertexArrayID;
-	GLuint vertexBufferID;
+    // OpenGL Buffers
+    GLuint vertexArrayID;
+    GLuint vertexBufferID;
 	GLuint uvBufferID;
-	GLuint indexBufferID;
-	GLuint textureID;
-	GLuint mvpMatrixID;
-	GLuint textureSamplerID;
-	GLuint programID;
+    GLuint indexBufferID;
+	GLuint colorBufferID; // Added color buffer
+    GLuint textureID;
 
-	void initialize(glm::vec3 position, glm::vec3 scale, char* texturePath, const char* objPath) {
-		this->position = position;
-		this->scale = scale;
-		this->texture = texturePath;
+    // Shader Variable IDs
+    GLuint mvpMatrixID;
+    GLuint textureSamplerID;
+    GLuint programID;
+
+    void initialize(glm::vec3 position, glm::vec3 scale, char* texturePath, const char* objPath) {
+        this->position = position;
+        this->scale = scale;
+        this->texture = texturePath;
 		loadOBJ(objPath, vertices, uvs, indices);
-		// Create VAO
-		glGenVertexArrays(1, &vertexArrayID);
-		glBindVertexArray(vertexArrayID);
-		// Create vertex buffer
-		glGenBuffers(1, &vertexBufferID);
-		glBindBuffer(GL_ARRAY_BUFFER, vertexBufferID);
-		glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(GLfloat), vertices.data(), GL_STATIC_DRAW);
 
-		// Create UV buffer
+		colors.resize(vertices.size());
+        // Generate colors based on vertex index
+		for (size_t i = 0; i < vertices.size()/3; ++i) {
+			float r = static_cast<float>(i)/ static_cast<float>(vertices.size()/3);
+			float g = static_cast<float>(i*i) / static_cast<float>((vertices.size()/3) * (vertices.size()/3));
+			float b = static_cast<float>(i*i*i) / static_cast<float>((vertices.size()/3) * (vertices.size()/3) * (vertices.size()/3));
+
+
+			colors[i * 3] = r;     // Red component
+            colors[i * 3 + 1] = g; // Green component
+            colors[i * 3 + 2] = b; // Blue component
+		}
+
+        // Create vertex array object
+        glGenVertexArrays(1, &vertexArrayID);
+        glBindVertexArray(vertexArrayID);
+
+        // Create vertex buffer object
+        glGenBuffers(1, &vertexBufferID);
+        glBindBuffer(GL_ARRAY_BUFFER, vertexBufferID);
+        glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(GLfloat), vertices.data(), GL_STATIC_DRAW);
+
+		// Create color buffer object
+		glGenBuffers(1, &colorBufferID);
+		glBindBuffer(GL_ARRAY_BUFFER, colorBufferID);
+		glBufferData(GL_ARRAY_BUFFER, colors.size() * sizeof(GLfloat), colors.data(), GL_STATIC_DRAW);
+
+		// Create uv buffer object
 		glGenBuffers(1, &uvBufferID);
 		glBindBuffer(GL_ARRAY_BUFFER, uvBufferID);
 		glBufferData(GL_ARRAY_BUFFER, uvs.size() * sizeof(GLfloat), uvs.data(), GL_STATIC_DRAW);
 
-		// Index buffer
-		glGenBuffers(1, &indexBufferID);
-		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBufferID);
-		glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(GLuint), indices.data(), GL_STATIC_DRAW);
+        // Create index buffer object
+        glGenBuffers(1, &indexBufferID);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBufferID);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(GLuint), indices.data(), GL_STATIC_DRAW);
+		
+        // Load Texture
+        textureID = LoadTextureTileBox(texturePath);
 
-		// Load texture
-		textureID = LoadTextureTileBox(texture);
 
-		// Load shaders
-		programID = LoadShadersFromFile("../../../lab2/box.vert", "../../../lab2/box.frag");
-		mvpMatrixID = glGetUniformLocation(programID, "MVP");
-		textureSamplerID = glGetUniformLocation(programID, "textureSampler");
-	}
+        // Load Shaders
+        programID = LoadShadersFromFile("../../../lab2/object.vert", "../../../lab2/object.frag"); // Assuming you have these shaders
+        mvpMatrixID = glGetUniformLocation(programID, "MVP");
+        textureSamplerID = glGetUniformLocation(programID, "textureSampler");
+    }
 
-	void render(glm::mat4 cameraMatrix) {
-		glUseProgram(programID);
+    void render(glm::mat4 cameraMatrix) {
+        glUseProgram(programID);
 
-		// Bind vertex buffer
-		glEnableVertexAttribArray(0);
-		glBindBuffer(GL_ARRAY_BUFFER, vertexBufferID);
-		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
-
-		// Bind UV buffer
+        // Vertex attribute
+        glEnableVertexAttribArray(0);
+        glBindBuffer(GL_ARRAY_BUFFER, vertexBufferID);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
+		
+		// Color attribute
+        glEnableVertexAttribArray(1);
+        glBindBuffer(GL_ARRAY_BUFFER, colorBufferID);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, 0);
+		
+		// UV attribute
 		glEnableVertexAttribArray(2);
 		glBindBuffer(GL_ARRAY_BUFFER, uvBufferID);
 		glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 0, 0);
 
-		// Bind index buffer
-		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBufferID);
 
-		glm::mat4 modelMatrix = glm::mat4();
-		modelMatrix = glm::translate(modelMatrix, position);
-		modelMatrix = glm::scale(modelMatrix, scale);
+        // Index buffer
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBufferID);
 
-		glm::mat4 mvp = cameraMatrix * modelMatrix;
-		glUniformMatrix4fv(mvpMatrixID, 1, GL_FALSE, &mvp[0][0]);
 
-		// Bind texture
+        // Model matrix
+        glm::mat4 modelMatrix = glm::mat4(1.0f);
+        modelMatrix = glm::translate(modelMatrix, position);
+        modelMatrix = glm::scale(modelMatrix, scale);
+
+        // MVP Matrix
+        glm::mat4 mvp = cameraMatrix * modelMatrix;
+        glUniformMatrix4fv(mvpMatrixID, 1, GL_FALSE, &mvp[0][0]);
+
+		// Texture
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, textureID);
 		glUniform1i(textureSamplerID, 0);
 
-		glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, 0);
-
-		// Disable vertex attributes
-		glDisableVertexAttribArray(0);
+        // Draw
+        glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, 0);
+		
+        glDisableVertexAttribArray(0);
+		glDisableVertexAttribArray(1);
 		glDisableVertexAttribArray(2);
-	}
+    }
 
-	void cleanup() {
-		glDeleteBuffers(1, &vertexBufferID);
+    void cleanup() {
+        glDeleteBuffers(1, &vertexBufferID);
 		glDeleteBuffers(1, &uvBufferID);
-		glDeleteBuffers(1, &indexBufferID);
-		glDeleteVertexArrays(1, &vertexArrayID);
-		glDeleteProgram(programID);
-	}
-
+        glDeleteBuffers(1, &indexBufferID);
+		glDeleteBuffers(1, &colorBufferID);
+        glDeleteVertexArrays(1, &vertexArrayID);
+        glDeleteTextures(1, &textureID);
+        glDeleteProgram(programID);
+    }
 };
+
 struct skyBox {
 	glm::vec3 position;		// Position of the box
 	glm::vec3 scale;		// Size of the box in each axis
@@ -990,8 +1045,10 @@ int main(void)
 
 
 	//--------------------------------------------idk
-	RandomObject randomObject;
-	randomObject.initialize(glm::vec3(0, 0, 0), glm::vec3(50, 50, 50), "../../../lab2/facade1.jpg", "../../../lab2/tinker.obj");
+	Object myObject;
+	myObject.initialize(glm::vec3(0, 0, 0), glm::vec3(20, 20, 20), "../../../lab2/facade1.jpg", "../../../lab2/tinker.obj");
+
+
 
 
 	// Camera setup
@@ -1002,7 +1059,7 @@ int main(void)
 	glm::mat4 viewMatrix, projectionMatrix;
     glm::float32 FoV = 45;
 	glm::float32 zNear = 0.1f;
-	glm::float32 zFar = 2000.0f;
+	glm::float32 zFar = 3000.0f;
 	projectionMatrix = glm::perspective(glm::radians(FoV), 4.0f / 3.0f, zNear, zFar);
 	std::cout << "Initial lookat: (" << lookat.x << ", " << lookat.y << ", " << lookat.z << ")\n";
 
@@ -1020,13 +1077,15 @@ int main(void)
 		glm::mat4 vp = projectionMatrix * viewMatrix;
 
 		//// Render the building
-		//glm::mat4 viewMatrixSkybox = glm::mat4(glm::mat3(viewMatrix)); // Remove translation
-		//glm::mat4 vpSkybox = projectionMatrix * viewMatrixSkybox;
-		//glDepthFunc(GL_LEQUAL);
-		//glDepthMask(GL_FALSE);
-		//skybox.render(vpSkybox);
-		//glDepthMask(GL_TRUE);
-		//glDepthFunc(GL_LESS);
+		glm::mat4 viewMatrixSkybox = glm::mat4(glm::mat3(viewMatrix)); // Remove translation
+		glm::mat4 vpSkybox = projectionMatrix * viewMatrixSkybox;
+		glDepthFunc(GL_LEQUAL);
+		glDepthMask(GL_FALSE);
+		skybox.render(vpSkybox);
+		glDepthMask(GL_TRUE);
+		glDepthFunc(GL_LESS);
+		myObject.render(vp);
+
 		//for (size_t i = 0; i < buildings.size(); ++i) {
 		//	buildings[i].render(vp);
 		//}
@@ -1044,13 +1103,13 @@ int main(void)
 
 	} // Check if the ESC key was pressed or the window was closed
 	while (!glfwWindowShouldClose(window));
+	myObject.cleanup();
 	for (size_t i = 0; i < buildings.size(); ++i) {
 		buildings[i].cleanup();
 	}
 	for (auto& cloud : clouds) {
 		cloud.cleanup();
 	}
-
 	skybox.cleanup();
 	// Close OpenGL window and terminate GLFW
 	glfwTerminate();

@@ -1016,7 +1016,7 @@ int main(void)
 
 
 			Building b;
-			position = glm::vec3(x * spacing, randomHeight * 16, z * spacing);
+			position = glm::vec3(x * spacing, 150+randomHeight * 16, z * spacing);
 			glm::vec3 size = glm::vec3(16 * randomX, randomHeight * 16, 16 * randomZ);
 
 			int randomTexture = rand() % 6;
@@ -1086,9 +1086,9 @@ int main(void)
 		glDepthFunc(GL_LESS);
 		myObject.render(vp);
 
-		//for (size_t i = 0; i < buildings.size(); ++i) {
-		//	buildings[i].render(vp);
-		//}
+		for (size_t i = 0; i < buildings.size(); ++i) {
+			buildings[i].render(vp);
+		}
 		
 
 		//glm::mat4 viewMatrixClouds = glm::mat4(glm::mat3(viewMatrix)); // Strip translation

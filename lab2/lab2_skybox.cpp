@@ -11,6 +11,7 @@
 #include <vector>    // For std::vector
 #include <string>    // For std::string
 #include <glm/vec3.hpp> // For glm::vec3
+#include <tiny_gltf.h>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb/stb_image.h>
@@ -122,7 +123,7 @@ static GLuint LoadTextureTileBox(const char *texture_file_path) {
     return texture;
 }
 
-struct Object {
+struct Island {
     glm::vec3 position;
     glm::vec3 scale;
     char* texture;
@@ -192,7 +193,7 @@ struct Object {
 
 
         // Load Shaders
-        programID = LoadShadersFromFile("../../../lab2/object.vert", "../../../lab2/object.frag"); // Assuming you have these shaders
+        programID = LoadShadersFromFile("../../../lab2/shaders/island.vert", "../../../lab2/shaders/island.frag"); // Assuming you have these shaders
         mvpMatrixID = glGetUniformLocation(programID, "MVP");
         textureSamplerID = glGetUniformLocation(programID, "textureSampler");
     }
@@ -446,7 +447,7 @@ GL_STATIC_DRAW);
 		glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(index_buffer_data), index_buffer_data, GL_STATIC_DRAW);
 
 		// Create and compile our GLSL program from the shaders
-		programID = LoadShadersFromFile("../../../lab2/skybox.vert", "../../../lab2/skybox.frag");
+		programID = LoadShadersFromFile("../../../lab2/shaders/skybox.vert", "../../../lab2/shaders/skybox.frag");
 		if (programID == 0)
 		{
 			std::cerr << "Failed to load shaders." << std::endl;
@@ -534,123 +535,7 @@ GL_STATIC_DRAW);
 		glDeleteProgram(programID);
 	}
 };
-struct Cloud {
-	glm::vec3 position;     // Position of the cloud
-	glm::vec3 scale;        // Scale of the cloud
-	char* texturePath;      // Path to the cloud texture
 
-	// Vertex data for a quad
-	GLfloat vertex_buffer_data[12] = {
-		-1.0f, -1.0f, 0.0f,  // Bottom-left
-		 1.0f, -1.0f, 0.0f,  // Bottom-right
-		 1.0f,  1.0f, 0.0f,  // Top-right
-		-1.0f,  1.0f, 0.0f   // Top-left
-	};
-
-	// UV coordinates for the texture
-	GLfloat uv_buffer_data[8] = {
-		0.0f, 0.0f, // Bottom-left
-		1.0f, 0.0f, // Bottom-right
-		1.0f, 1.0f, // Top-right
-		0.0f, 1.0f  // Top-left
-	};
-
-	// Index data for two triangles
-	GLuint index_buffer_data[6] = {
-		0, 1, 2,  // First triangle
-		0, 2, 3   // Second triangle
-	};
-
-	// OpenGL buffers
-	GLuint vertexArrayID;
-	GLuint vertexBufferID;
-	GLuint uvBufferID;
-	GLuint indexBufferID;
-	GLuint textureID;
-
-	// Shader variable IDs
-	GLuint mvpMatrixID;
-	GLuint textureSamplerID;
-	GLuint programID;
-
-	// Initialize the cloud
-	void initialize(glm::vec3 position, glm::vec3 scale, char* texturePath) {
-		this->position = position;
-		this->scale = scale;
-		this->texturePath = texturePath;
-
-		// Create VAO
-		glGenVertexArrays(1, &vertexArrayID);
-		glBindVertexArray(vertexArrayID);
-
-		// Vertex buffer
-		glGenBuffers(1, &vertexBufferID);
-		glBindBuffer(GL_ARRAY_BUFFER, vertexBufferID);
-		glBufferData(GL_ARRAY_BUFFER, sizeof(vertex_buffer_data), vertex_buffer_data, GL_STATIC_DRAW);
-
-		// UV buffer
-		glGenBuffers(1, &uvBufferID);
-		glBindBuffer(GL_ARRAY_BUFFER, uvBufferID);
-		glBufferData(GL_ARRAY_BUFFER, sizeof(uv_buffer_data), uv_buffer_data, GL_STATIC_DRAW);
-
-		// Index buffer
-		glGenBuffers(1, &indexBufferID);
-		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBufferID);
-		glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(index_buffer_data), index_buffer_data, GL_STATIC_DRAW);
-
-		// Load texture
-		textureID = LoadTextureTileBox(texturePath);
-
-		// Load shaders
-		programID = LoadShadersFromFile("../../../lab2/cloud.vert", "../../../lab2/cloud.frag");
-		mvpMatrixID = glGetUniformLocation(programID, "MVP");
-		textureSamplerID = glGetUniformLocation(programID, "textureSampler");
-	}
-
-	// Render the cloud
-	void render(glm::mat4 vpMatrix) {
-		glUseProgram(programID);
-
-		// Model matrix for scaling and positioning
-		glm::mat4 modelMatrix = glm::translate(glm::mat4(1.0f), position);
-		modelMatrix = glm::scale(modelMatrix, scale);
-
-		glm::mat4 mvp = vpMatrix * modelMatrix;
-		glUniformMatrix4fv(mvpMatrixID, 1, GL_FALSE, &mvp[0][0]);
-
-		// Bind texture
-		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_2D, textureID);
-		glUniform1i(textureSamplerID, 0);
-
-		// Bind vertex buffer
-		glEnableVertexAttribArray(0);
-		glBindBuffer(GL_ARRAY_BUFFER, vertexBufferID);
-		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
-
-		// Bind UV buffer
-		glEnableVertexAttribArray(1);
-		glBindBuffer(GL_ARRAY_BUFFER, uvBufferID);
-		glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, 0);
-
-		// Bind index buffer and draw
-		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBufferID);
-		glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
-
-		// Disable vertex attributes
-		glDisableVertexAttribArray(0);
-		glDisableVertexAttribArray(1);
-	}
-
-	// Cleanup resources
-	void cleanup() {
-		glDeleteBuffers(1, &vertexBufferID);
-		glDeleteBuffers(1, &uvBufferID);
-		glDeleteBuffers(1, &indexBufferID);
-		glDeleteVertexArrays(1, &vertexArrayID);
-		glDeleteProgram(programID);
-	}
-};
 
 struct Building {
 	glm::vec3 position;		// Position of the box 
@@ -845,7 +730,7 @@ struct Building {
 		glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(index_buffer_data), index_buffer_data, GL_STATIC_DRAW);
 
 		// Create and compile our GLSL program from the shaders
-		programID = LoadShadersFromFile("../../../lab2/box.vert", "../../../lab2/box.frag");
+		programID = LoadShadersFromFile("../../../lab2/shaders/box.vert", "../../../lab2/textures/box.frag");
 		if (programID == 0)
 		{
 			std::cerr << "Failed to load shaders." << std::endl;
@@ -1021,7 +906,7 @@ int main(void)
 
 			int randomTexture = rand() % 6;
 			char newFilePath[30];
-			sprintf(newFilePath, "../../../lab2/facade%d.jpg", randomTexture);
+			sprintf(newFilePath, "../../../lab2/textures/facade%d.jpg", randomTexture);
 			b.initialize(position, size, newFilePath, randomHeight);
 			buildings.push_back(b);
 		}
@@ -1029,24 +914,12 @@ int main(void)
 	//skybox-------------------------------------
 	glm::vec3 skyboxScale(30,30,30); // Add margin
 	skyBox skybox;
-	skybox.initialize(glm::vec3(0, 0, 0), glm::vec3(1, 1, 1), "../../../lab2/sky.png", 1);
-
-	//Clouds-------------------------------------
-	std::vector<Cloud> clouds;
-	int numClouds = 10;
-
-	for (int i = 0; i < numClouds; ++i) {
-		Cloud c;
-		glm::vec3 position = glm::vec3(rand() % 500 - 250, 200 + rand() % 100, rand() % 500 - 250);
-		glm::vec3 scale = glm::vec3(50.0f + rand() % 50, 25.0f, 50.0f + rand() % 50); // Random size
-		c.initialize(position, scale, "../../../lab2/facade3.jpg");
-		clouds.push_back(c);
-	}
+	skybox.initialize(glm::vec3(0, 0, 0), glm::vec3(1, 1, 1), "../../../lab2/textures/sky.png", 1);
 
 
 	//--------------------------------------------idk
-	Object myObject;
-	myObject.initialize(glm::vec3(0, 0, 0), glm::vec3(20, 20, 20), "../../../lab2/facade1.jpg", "../../../lab2/tinker.obj");
+	Island island;
+	island.initialize(glm::vec3(0, 0, 0), glm::vec3(20, 20, 20), "../../../lab2/textures/facade1.jpg", "../../../lab2/tinker.obj");
 
 
 
@@ -1084,7 +957,7 @@ int main(void)
 		skybox.render(vpSkybox);
 		glDepthMask(GL_TRUE);
 		glDepthFunc(GL_LESS);
-		myObject.render(vp);
+		island.render(vp);
 
 		for (size_t i = 0; i < buildings.size(); ++i) {
 			buildings[i].render(vp);
@@ -1103,13 +976,11 @@ int main(void)
 
 	} // Check if the ESC key was pressed or the window was closed
 	while (!glfwWindowShouldClose(window));
-	myObject.cleanup();
+	island.cleanup();
 	for (size_t i = 0; i < buildings.size(); ++i) {
 		buildings[i].cleanup();
 	}
-	for (auto& cloud : clouds) {
-		cloud.cleanup();
-	}
+
 	skybox.cleanup();
 	// Close OpenGL window and terminate GLFW
 	glfwTerminate();

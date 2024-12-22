@@ -45,7 +45,6 @@ void loadOBJ(const char* filepath, std::vector<GLfloat>& vertices,
 	bool hasUVs = false;
 
 	while (std::getline(file, line)) {
-		std::cout << "Read line: " << line << std::endl; // Print the current line
 
 		std::istringstream ss(line);
 		std::string prefix;
@@ -730,7 +729,7 @@ struct Building {
 		glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(index_buffer_data), index_buffer_data, GL_STATIC_DRAW);
 
 		// Create and compile our GLSL program from the shaders
-		programID = LoadShadersFromFile("../../../lab2/shaders/box.vert", "../../../lab2/textures/box.frag");
+		programID = LoadShadersFromFile("../../../lab2/shaders/box.vert", "../../../lab2/shaders/box.frag");
 		if (programID == 0)
 		{
 			std::cerr << "Failed to load shaders." << std::endl;
@@ -901,11 +900,11 @@ int main(void)
 
 
 			Building b;
-			position = glm::vec3(x * spacing, 150+randomHeight * 16, z * spacing);
+			position = glm::vec3(x * spacing, 200+randomHeight * 16, z * spacing);
 			glm::vec3 size = glm::vec3(16 * randomX, randomHeight * 16, 16 * randomZ);
 
 			int randomTexture = rand() % 6;
-			char newFilePath[30];
+			char newFilePath[37];
 			sprintf(newFilePath, "../../../lab2/textures/facade%d.jpg", randomTexture);
 			b.initialize(position, size, newFilePath, randomHeight);
 			buildings.push_back(b);
@@ -915,8 +914,6 @@ int main(void)
 	glm::vec3 skyboxScale(30,30,30); // Add margin
 	skyBox skybox;
 	skybox.initialize(glm::vec3(0, 0, 0), glm::vec3(1, 1, 1), "../../../lab2/textures/sky.png", 1);
-
-
 	//--------------------------------------------idk
 	Island island;
 	island.initialize(glm::vec3(0, 0, 0), glm::vec3(20, 20, 20), "../../../lab2/textures/facade1.jpg", "../../../lab2/tinker.obj");
@@ -950,25 +947,20 @@ int main(void)
 		glm::mat4 vp = projectionMatrix * viewMatrix;
 
 		//// Render the building
-		glm::mat4 viewMatrixSkybox = glm::mat4(glm::mat3(viewMatrix)); // Remove translation
-		glm::mat4 vpSkybox = projectionMatrix * viewMatrixSkybox;
-		glDepthFunc(GL_LEQUAL);
-		glDepthMask(GL_FALSE);
-		skybox.render(vpSkybox);
-		glDepthMask(GL_TRUE);
-		glDepthFunc(GL_LESS);
-		island.render(vp);
+		//glm::mat4 viewMatrixSkybox = glm::mat4(glm::mat3(viewMatrix)); // Remove translation
+		//glm::mat4 vpSkybox = projectionMatrix * viewMatrixSkybox;
+		//glDepthFunc(GL_LEQUAL);
+		//glDepthMask(GL_FALSE);
+		//skybox.render(vpSkybox);
+		//glDepthMask(GL_TRUE);
+		//glDepthFunc(GL_LESS);
+		//island.render(vp);
 
 		for (size_t i = 0; i < buildings.size(); ++i) {
 			buildings[i].render(vp);
 		}
 		
 
-		//glm::mat4 viewMatrixClouds = glm::mat4(glm::mat3(viewMatrix)); // Strip translation
-		//glm::mat4 vpClouds = projectionMatrix * viewMatrixClouds;
-		//for (auto& cloud : clouds) {
-		//	cloud.render(vpClouds);
-		//}
 
 		// Swap buffers
 		glfwSwapBuffers(window);

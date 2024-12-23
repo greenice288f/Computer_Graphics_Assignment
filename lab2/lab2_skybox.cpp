@@ -1152,7 +1152,7 @@ int main(void)
 
 
 			Building b;
-			position = glm::vec3(x * spacing, 200+randomHeight * 16, z * spacing);
+			position = glm::vec3(x * spacing, -275+randomHeight * 16, z * spacing);
 			glm::vec3 size = glm::vec3(16 * randomX, randomHeight * 16, 16 * randomZ);
 
 			int randomTexture = rand() % 6;
@@ -1170,7 +1170,7 @@ int main(void)
 	Island island;
 	island.initialize(glm::vec3(0, 0.5, 0), glm::vec3(20, 20, 20), "../../../lab2/textures/facade1.jpg", "../../../lab2/island.obj");
 	Cloud cloud;
-	cloud.initialize(glm::vec3(200, 200, 200), glm::vec3(10, 10, 10), "../../../lab2/textures/facade1.jpg", "../../../lab2/cloud.obj");
+	cloud.initialize(glm::vec3(200, 200, 200), glm::vec3(5, 5, 5), "../../../lab2/textures/facade1.jpg", "../../../lab2/cloud.obj");
 	Surface surface;
 	surface.initialize(glm::vec3(0, -22, 0), glm::vec3(20, 20, 20), "../../../lab2/textures/facade1.jpg", "../../../lab2/surface.obj");
 
@@ -1212,9 +1212,9 @@ int main(void)
 		surface.render(vp);
 
 		cloud.render(vp);
-		//for (size_t i = 0; i < buildings.size(); ++i) {
-		//	buildings[i].render(vp);
-		//}
+		for (size_t i = 0; i < buildings.size(); ++i) {
+			buildings[i].render(vp);
+		}
 		
 
 
@@ -1239,7 +1239,7 @@ int main(void)
 
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mode)
 {
-	static float movementSpeed = 10.0f; // Movement speed for WASD
+	static float movementSpeed = 20.0f; // Movement speed for WASD
 	static float rotationSpeed = 0.05f; // Rotation speed for arrow keys
 
 	if ((action == GLFW_REPEAT || action == GLFW_PRESS))

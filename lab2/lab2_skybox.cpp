@@ -11,6 +11,7 @@
 #include <vector>    // For std::vector
 #include <string>    // For std::string
 #include <glm/vec3.hpp> // For glm::vec3
+#include <tiny_gltf.h>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb/stb_image.h>
@@ -29,8 +30,9 @@ static glm::vec3 lastLookat = lookat; // Store the last known lookat value
 // View control
 static float viewAzimuth = 0.f;
 static float viewPolar = 0.f;
-static float viewDistance = 800.0f;
-void loadOBJ(const char* filepath, std::vector<GLfloat>& vertices, std::vector<GLuint>& indices) {
+static float viewDistance = 3000.0f;
+void loadOBJ(const char* filepath, std::vector<GLfloat>& vertices,
+	std::vector<GLfloat>& uvs, std::vector<GLuint>& indices) {
 	std::ifstream file(filepath);
 	if (!file.is_open()) {
 		std::cerr << "Error: Cannot open OBJ file " << filepath << std::endl;
@@ -39,23 +41,54 @@ void loadOBJ(const char* filepath, std::vector<GLfloat>& vertices, std::vector<G
 
 	std::string line;
 	std::vector<glm::vec3> temp_vertices;
+	std::vector<glm::vec2> temp_uvs;
+	bool hasUVs = false;
+
 	while (std::getline(file, line)) {
+
 		std::istringstream ss(line);
 		std::string prefix;
 		ss >> prefix;
-		if (prefix == "v") {
+
+		if (prefix == "v") { // Vertex
 			glm::vec3 vertex;
 			ss >> vertex.x >> vertex.y >> vertex.z;
 			temp_vertices.push_back(vertex);
 		}
-		else if (prefix == "f") {
-			GLuint vertexIndex[3];
-			for (int i = 0; i < 3; i++) {
-				ss >> vertexIndex[i];
-				indices.push_back(vertexIndex[i] - 1); // OBJ is 1-based
+		else if (prefix == "vt") { // Texture coordinate
+			glm::vec2 uv;
+			ss >> uv.x >> uv.y;
+			temp_uvs.push_back(uv);
+			hasUVs = true; // Set the flag since we found a vt line
+		}
+		else if (prefix == "f") { // Face
+			GLuint vertexIndex[3], uvIndex[3];
+			char separator;
+			if (hasUVs) {
+				for (int i = 0; i < 3; ++i) {
+					ss >> vertexIndex[i] >> separator >> uvIndex[i];
+					indices.push_back(vertexIndex[i] - 1);
+				}
+
+				for (int i = 0; i < 3; ++i)
+				{
+					uvs.push_back(temp_uvs[uvIndex[i] - 1].x);
+					uvs.push_back(temp_uvs[uvIndex[i] - 1].y);
+				}
+			}
+			else {
+				for (int i = 0; i < 3; ++i) {
+					ss >> vertexIndex[i];
+					indices.push_back(vertexIndex[i] - 1);
+				}
+				for (int i = 0; i < 3; i++) {
+					uvs.push_back(0.0f);
+					uvs.push_back(0.0f);
+				}
 			}
 		}
 	}
+
 	for (const auto& v : temp_vertices) {
 		vertices.push_back(v.x);
 		vertices.push_back(v.y);
@@ -89,6 +122,264 @@ static GLuint LoadTextureTileBox(const char *texture_file_path) {
     return texture;
 }
 
+struct Island {
+    glm::vec3 position;
+    glm::vec3 scale;
+    char* texture;
+	std::vector<GLfloat> vertices;
+	std::vector<GLfloat> uvs;
+	std::vector<GLuint> indices;
+    std::vector<GLfloat> colors; // Added color vector
+
+    // OpenGL Buffers
+    GLuint vertexArrayID;
+    GLuint vertexBufferID;
+	GLuint uvBufferID;
+    GLuint indexBufferID;
+	GLuint colorBufferID; // Added color buffer
+    GLuint textureID;
+
+    // Shader Variable IDs
+    GLuint mvpMatrixID;
+    GLuint textureSamplerID;
+    GLuint programID;
+
+    void initialize(glm::vec3 position, glm::vec3 scale, char* texturePath, const char* objPath) {
+        this->position = position;
+        this->scale = scale;
+        this->texture = texturePath;
+		loadOBJ(objPath, vertices, uvs, indices);
+
+		colors.resize(vertices.size());
+		// Generate brownish colors with different lighting
+		for (size_t i = 0; i < vertices.size() / 3; ++i) {
+			float intensity = 0.5f + 0.5f * (static_cast<float>(i) / static_cast<float>(vertices.size() / 3)); // Vary intensity from 0.5 to 1.0
+			float red = 0.6f * intensity;   // Base red with intensity adjustment
+			float green = 0.4f * intensity; // Base green with intensity adjustment
+			float blue = 0.2f * intensity;  // Base blue with intensity adjustment (kept low for brown tone)
+
+			colors[i * 3] = red;   // Red
+			colors[i * 3 + 1] = green; // Green
+			colors[i * 3 + 2] = blue;  // Blue
+		}
+
+
+
+        // Create vertex array object
+        glGenVertexArrays(1, &vertexArrayID);
+        glBindVertexArray(vertexArrayID);
+
+        // Create vertex buffer object
+        glGenBuffers(1, &vertexBufferID);
+        glBindBuffer(GL_ARRAY_BUFFER, vertexBufferID);
+        glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(GLfloat), vertices.data(), GL_STATIC_DRAW);
+
+		// Create color buffer object
+		glGenBuffers(1, &colorBufferID);
+		glBindBuffer(GL_ARRAY_BUFFER, colorBufferID);
+		glBufferData(GL_ARRAY_BUFFER, colors.size() * sizeof(GLfloat), colors.data(), GL_STATIC_DRAW);
+
+		// Create uv buffer object
+		glGenBuffers(1, &uvBufferID);
+		glBindBuffer(GL_ARRAY_BUFFER, uvBufferID);
+		glBufferData(GL_ARRAY_BUFFER, uvs.size() * sizeof(GLfloat), uvs.data(), GL_STATIC_DRAW);
+
+        // Create index buffer object
+        glGenBuffers(1, &indexBufferID);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBufferID);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(GLuint), indices.data(), GL_STATIC_DRAW);
+		
+        // Load Texture
+        textureID = LoadTextureTileBox(texturePath);
+
+
+        // Load Shaders
+        programID = LoadShadersFromFile("../../../lab2/shaders/island.vert", "../../../lab2/shaders/island.frag"); // Assuming you have these shaders
+        mvpMatrixID = glGetUniformLocation(programID, "MVP");
+        textureSamplerID = glGetUniformLocation(programID, "textureSampler");
+    }
+
+    void render(glm::mat4 cameraMatrix) {
+        glUseProgram(programID);
+
+        // Vertex attribute
+        glEnableVertexAttribArray(0);
+        glBindBuffer(GL_ARRAY_BUFFER, vertexBufferID);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
+		
+		// Color attribute
+        glEnableVertexAttribArray(1);
+        glBindBuffer(GL_ARRAY_BUFFER, colorBufferID);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, 0);
+		
+		// UV attribute
+		glEnableVertexAttribArray(2);
+		glBindBuffer(GL_ARRAY_BUFFER, uvBufferID);
+		glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 0, 0);
+
+
+        // Index buffer
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBufferID);
+
+
+        // Model matrix
+        glm::mat4 modelMatrix = glm::mat4(1.0f);
+        modelMatrix = glm::translate(modelMatrix, position);
+        modelMatrix = glm::scale(modelMatrix, scale);
+
+        // MVP Matrix
+        glm::mat4 mvp = cameraMatrix * modelMatrix;
+        glUniformMatrix4fv(mvpMatrixID, 1, GL_FALSE, &mvp[0][0]);
+
+		// Texture
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, textureID);
+		glUniform1i(textureSamplerID, 0);
+
+        // Draw
+        glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, 0);
+		
+        glDisableVertexAttribArray(0);
+		glDisableVertexAttribArray(1);
+		glDisableVertexAttribArray(2);
+    }
+
+    void cleanup() {
+        glDeleteBuffers(1, &vertexBufferID);
+		glDeleteBuffers(1, &uvBufferID);
+        glDeleteBuffers(1, &indexBufferID);
+		glDeleteBuffers(1, &colorBufferID);
+        glDeleteVertexArrays(1, &vertexArrayID);
+        glDeleteTextures(1, &textureID);
+        glDeleteProgram(programID);
+    }
+};
+struct Cloud {
+	glm::vec3 position;
+	glm::vec3 scale;
+	char* texture;
+	std::vector<GLfloat> vertices;
+	std::vector<GLfloat> uvs;
+	std::vector<GLuint> indices;
+	std::vector<GLfloat> colors; // Added color vector
+
+	// OpenGL Buffers
+	GLuint vertexArrayID;
+	GLuint vertexBufferID;
+	GLuint uvBufferID;
+	GLuint indexBufferID;
+	GLuint colorBufferID; // Added color buffer
+	GLuint textureID;
+
+	// Shader Variable IDs
+	GLuint mvpMatrixID;
+	GLuint textureSamplerID;
+	GLuint programID;
+
+	void initialize(glm::vec3 position, glm::vec3 scale, char* texturePath, const char* objPath) {
+		this->position = position;
+		this->scale = scale;
+		this->texture = texturePath;
+		loadOBJ(objPath, vertices, uvs, indices);
+
+		colors.resize(vertices.size());
+		// Generate colors based on vertex index
+		for (size_t i = 0; i < vertices.size() / 3; ++i) {
+			colors[i * 3] = 0.8f + 0.2f * (static_cast<float>(i) / static_cast<float>(vertices.size() / 3)); // Red
+			colors[i * 3 + 1] = 0.8f + 0.2f * (static_cast<float>(i * i) / static_cast<float>((vertices.size() / 3) * (vertices.size() / 3))); // Green
+			colors[i * 3 + 2] = 0.8f + 0.2f * (static_cast<float>(i * i * i) / static_cast<float>((vertices.size() / 3) * (vertices.size() / 3) * (vertices.size() / 3))); // Blue
+
+		}
+
+		// Create vertex array object
+		glGenVertexArrays(1, &vertexArrayID);
+		glBindVertexArray(vertexArrayID);
+
+		// Create vertex buffer object
+		glGenBuffers(1, &vertexBufferID);
+		glBindBuffer(GL_ARRAY_BUFFER, vertexBufferID);
+		glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(GLfloat), vertices.data(), GL_STATIC_DRAW);
+
+		// Create color buffer object
+		glGenBuffers(1, &colorBufferID);
+		glBindBuffer(GL_ARRAY_BUFFER, colorBufferID);
+		glBufferData(GL_ARRAY_BUFFER, colors.size() * sizeof(GLfloat), colors.data(), GL_STATIC_DRAW);
+
+		// Create uv buffer object
+		glGenBuffers(1, &uvBufferID);
+		glBindBuffer(GL_ARRAY_BUFFER, uvBufferID);
+		glBufferData(GL_ARRAY_BUFFER, uvs.size() * sizeof(GLfloat), uvs.data(), GL_STATIC_DRAW);
+
+		// Create index buffer object
+		glGenBuffers(1, &indexBufferID);
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBufferID);
+		glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(GLuint), indices.data(), GL_STATIC_DRAW);
+
+		// Load Texture
+		textureID = LoadTextureTileBox(texturePath);
+
+
+		// Load Shaders
+		programID = LoadShadersFromFile("../../../lab2/shaders/island.vert", "../../../lab2/shaders/island.frag"); // Assuming you have these shaders
+		mvpMatrixID = glGetUniformLocation(programID, "MVP");
+		textureSamplerID = glGetUniformLocation(programID, "textureSampler");
+	}
+
+	void render(glm::mat4 cameraMatrix) {
+		glUseProgram(programID);
+
+		// Vertex attribute
+		glEnableVertexAttribArray(0);
+		glBindBuffer(GL_ARRAY_BUFFER, vertexBufferID);
+		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
+
+		// Color attribute
+		glEnableVertexAttribArray(1);
+		glBindBuffer(GL_ARRAY_BUFFER, colorBufferID);
+		glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, 0);
+
+		// UV attribute
+		glEnableVertexAttribArray(2);
+		glBindBuffer(GL_ARRAY_BUFFER, uvBufferID);
+		glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 0, 0);
+
+
+		// Index buffer
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBufferID);
+
+
+		// Model matrix
+		glm::mat4 modelMatrix = glm::mat4(1.0f);
+		modelMatrix = glm::translate(modelMatrix, position);
+		modelMatrix = glm::scale(modelMatrix, scale);
+
+		// MVP Matrix
+		glm::mat4 mvp = cameraMatrix * modelMatrix;
+		glUniformMatrix4fv(mvpMatrixID, 1, GL_FALSE, &mvp[0][0]);
+
+		// Texture
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, textureID);
+		glUniform1i(textureSamplerID, 0);
+
+		// Draw
+		glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, 0);
+
+		glDisableVertexAttribArray(0);
+		glDisableVertexAttribArray(1);
+		glDisableVertexAttribArray(2);
+	}
+
+	void cleanup() {
+		glDeleteBuffers(1, &vertexBufferID);
+		glDeleteBuffers(1, &uvBufferID);
+		glDeleteBuffers(1, &indexBufferID);
+		glDeleteBuffers(1, &colorBufferID);
+		glDeleteVertexArrays(1, &vertexArrayID);
+		glDeleteTextures(1, &textureID);
+		glDeleteProgram(programID);
+	}
+};
 struct skyBox {
 	glm::vec3 position;		// Position of the box
 	glm::vec3 scale;		// Size of the box in each axis
@@ -282,7 +573,7 @@ GL_STATIC_DRAW);
 		glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(index_buffer_data), index_buffer_data, GL_STATIC_DRAW);
 
 		// Create and compile our GLSL program from the shaders
-		programID = LoadShadersFromFile("../../../lab2/skybox.vert", "../../../lab2/skybox.frag");
+		programID = LoadShadersFromFile("../../../lab2/shaders/skybox.vert", "../../../lab2/shaders/skybox.frag");
 		if (programID == 0)
 		{
 			std::cerr << "Failed to load shaders." << std::endl;
@@ -370,124 +661,133 @@ GL_STATIC_DRAW);
 		glDeleteProgram(programID);
 	}
 };
-struct Cloud {
-	glm::vec3 position;     // Position of the cloud
-	glm::vec3 scale;        // Scale of the cloud
-	char* texturePath;      // Path to the cloud texture
 
-	// Vertex data for a quad
-	GLfloat vertex_buffer_data[12] = {
-		-1.0f, -1.0f, 0.0f,  // Bottom-left
-		 1.0f, -1.0f, 0.0f,  // Bottom-right
-		 1.0f,  1.0f, 0.0f,  // Top-right
-		-1.0f,  1.0f, 0.0f   // Top-left
-	};
+struct Surface {
+	glm::vec3 position;
+	glm::vec3 scale;
+	char* texture;
+	std::vector<GLfloat> vertices;
+	std::vector<GLfloat> uvs;
+	std::vector<GLuint> indices;
+	std::vector<GLfloat> colors; // Added color vector
 
-	// UV coordinates for the texture
-	GLfloat uv_buffer_data[8] = {
-		0.0f, 0.0f, // Bottom-left
-		1.0f, 0.0f, // Bottom-right
-		1.0f, 1.0f, // Top-right
-		0.0f, 1.0f  // Top-left
-	};
-
-	// Index data for two triangles
-	GLuint index_buffer_data[6] = {
-		0, 1, 2,  // First triangle
-		0, 2, 3   // Second triangle
-	};
-
-	// OpenGL buffers
+	// OpenGL Buffers
 	GLuint vertexArrayID;
 	GLuint vertexBufferID;
 	GLuint uvBufferID;
 	GLuint indexBufferID;
+	GLuint colorBufferID; // Added color buffer
 	GLuint textureID;
 
-	// Shader variable IDs
+	// Shader Variable IDs
 	GLuint mvpMatrixID;
 	GLuint textureSamplerID;
 	GLuint programID;
 
-	// Initialize the cloud
-	void initialize(glm::vec3 position, glm::vec3 scale, char* texturePath) {
+	void initialize(glm::vec3 position, glm::vec3 scale, char* texturePath, const char* objPath) {
 		this->position = position;
 		this->scale = scale;
-		this->texturePath = texturePath;
+		this->texture = texturePath;
+		loadOBJ(objPath, vertices, uvs, indices);
 
-		// Create VAO
+		colors.resize(vertices.size());
+		// Generate colors based on vertex index
+		for (size_t i = 0; i < vertices.size() / 3; ++i) {
+			colors[i * 3] = 0.4f + 0.2f * (static_cast<float>(i) / static_cast<float>(vertices.size() / 3)); // Red (lower base value)
+			colors[i * 3 + 1] = 0.8f + 0.2f * (static_cast<float>(i * i) / static_cast<float>((vertices.size() / 3) * (vertices.size() / 3))); // Green (higher base value, prioritized)
+			colors[i * 3 + 2] = 0.3f + 0.1f * (static_cast<float>(i * i * i) / static_cast<float>((vertices.size() / 3) * (vertices.size() / 3) * (vertices.size() / 3))); // Blue (minimal)
+		}
+
+
+		// Create vertex array object
 		glGenVertexArrays(1, &vertexArrayID);
 		glBindVertexArray(vertexArrayID);
 
-		// Vertex buffer
+		// Create vertex buffer object
 		glGenBuffers(1, &vertexBufferID);
 		glBindBuffer(GL_ARRAY_BUFFER, vertexBufferID);
-		glBufferData(GL_ARRAY_BUFFER, sizeof(vertex_buffer_data), vertex_buffer_data, GL_STATIC_DRAW);
+		glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(GLfloat), vertices.data(), GL_STATIC_DRAW);
 
-		// UV buffer
+		// Create color buffer object
+		glGenBuffers(1, &colorBufferID);
+		glBindBuffer(GL_ARRAY_BUFFER, colorBufferID);
+		glBufferData(GL_ARRAY_BUFFER, colors.size() * sizeof(GLfloat), colors.data(), GL_STATIC_DRAW);
+
+		// Create uv buffer object
 		glGenBuffers(1, &uvBufferID);
 		glBindBuffer(GL_ARRAY_BUFFER, uvBufferID);
-		glBufferData(GL_ARRAY_BUFFER, sizeof(uv_buffer_data), uv_buffer_data, GL_STATIC_DRAW);
+		glBufferData(GL_ARRAY_BUFFER, uvs.size() * sizeof(GLfloat), uvs.data(), GL_STATIC_DRAW);
 
-		// Index buffer
+		// Create index buffer object
 		glGenBuffers(1, &indexBufferID);
 		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBufferID);
-		glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(index_buffer_data), index_buffer_data, GL_STATIC_DRAW);
+		glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(GLuint), indices.data(), GL_STATIC_DRAW);
 
-		// Load texture
+		// Load Texture
 		textureID = LoadTextureTileBox(texturePath);
 
-		// Load shaders
-		programID = LoadShadersFromFile("../../../lab2/cloud.vert", "../../../lab2/cloud.frag");
+
+		// Load Shaders
+		programID = LoadShadersFromFile("../../../lab2/shaders/island.vert", "../../../lab2/shaders/island.frag"); // Assuming you have these shaders
 		mvpMatrixID = glGetUniformLocation(programID, "MVP");
 		textureSamplerID = glGetUniformLocation(programID, "textureSampler");
 	}
 
-	// Render the cloud
-	void render(glm::mat4 vpMatrix) {
+	void render(glm::mat4 cameraMatrix) {
 		glUseProgram(programID);
 
-		// Model matrix for scaling and positioning
-		glm::mat4 modelMatrix = glm::translate(glm::mat4(1.0f), position);
-		modelMatrix = glm::scale(modelMatrix, scale);
-
-		glm::mat4 mvp = vpMatrix * modelMatrix;
-		glUniformMatrix4fv(mvpMatrixID, 1, GL_FALSE, &mvp[0][0]);
-
-		// Bind texture
-		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_2D, textureID);
-		glUniform1i(textureSamplerID, 0);
-
-		// Bind vertex buffer
+		// Vertex attribute
 		glEnableVertexAttribArray(0);
 		glBindBuffer(GL_ARRAY_BUFFER, vertexBufferID);
 		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
 
-		// Bind UV buffer
+		// Color attribute
 		glEnableVertexAttribArray(1);
+		glBindBuffer(GL_ARRAY_BUFFER, colorBufferID);
+		glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, 0);
+
+		// UV attribute
+		glEnableVertexAttribArray(2);
 		glBindBuffer(GL_ARRAY_BUFFER, uvBufferID);
-		glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, 0);
+		glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 0, 0);
 
-		// Bind index buffer and draw
+
+		// Index buffer
 		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBufferID);
-		glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 
-		// Disable vertex attributes
+
+		// Model matrix
+		glm::mat4 modelMatrix = glm::mat4(1.0f);
+		modelMatrix = glm::translate(modelMatrix, position);
+		modelMatrix = glm::scale(modelMatrix, scale);
+
+		// MVP Matrix
+		glm::mat4 mvp = cameraMatrix * modelMatrix;
+		glUniformMatrix4fv(mvpMatrixID, 1, GL_FALSE, &mvp[0][0]);
+
+		// Texture
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, textureID);
+		glUniform1i(textureSamplerID, 0);
+
+		// Draw
+		glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, 0);
+
 		glDisableVertexAttribArray(0);
 		glDisableVertexAttribArray(1);
+		glDisableVertexAttribArray(2);
 	}
 
-	// Cleanup resources
 	void cleanup() {
 		glDeleteBuffers(1, &vertexBufferID);
 		glDeleteBuffers(1, &uvBufferID);
 		glDeleteBuffers(1, &indexBufferID);
+		glDeleteBuffers(1, &colorBufferID);
 		glDeleteVertexArrays(1, &vertexArrayID);
+		glDeleteTextures(1, &textureID);
 		glDeleteProgram(programID);
 	}
 };
-
 struct Building {
 	glm::vec3 position;		// Position of the box 
 	glm::vec3 scale;		// Size of the box in each axis
@@ -681,7 +981,7 @@ struct Building {
 		glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(index_buffer_data), index_buffer_data, GL_STATIC_DRAW);
 
 		// Create and compile our GLSL program from the shaders
-		programID = LoadShadersFromFile("../../../lab2/box.vert", "../../../lab2/box.frag");
+		programID = LoadShadersFromFile("../../../lab2/shaders/box.vert", "../../../lab2/shaders/box.frag");
 		if (programID == 0)
 		{
 			std::cerr << "Failed to load shaders." << std::endl;
@@ -852,12 +1152,12 @@ int main(void)
 
 
 			Building b;
-			position = glm::vec3(x * spacing, randomHeight * 16, z * spacing);
+			position = glm::vec3(x * spacing, 200+randomHeight * 16, z * spacing);
 			glm::vec3 size = glm::vec3(16 * randomX, randomHeight * 16, 16 * randomZ);
 
 			int randomTexture = rand() % 6;
-			char newFilePath[30];
-			sprintf(newFilePath, "../../../lab2/facade%d.jpg", randomTexture);
+			char newFilePath[37];
+			sprintf(newFilePath, "../../../lab2/textures/facade%d.jpg", randomTexture);
 			b.initialize(position, size, newFilePath, randomHeight);
 			buildings.push_back(b);
 		}
@@ -865,21 +1165,14 @@ int main(void)
 	//skybox-------------------------------------
 	glm::vec3 skyboxScale(30,30,30); // Add margin
 	skyBox skybox;
-	skybox.initialize(glm::vec3(0, 0, 0), glm::vec3(1, 1, 1), "../../../lab2/sky.png", 1);
-
-	//Clouds-------------------------------------
-	std::vector<Cloud> clouds;
-	int numClouds = 10;
-
-	for (int i = 0; i < numClouds; ++i) {
-		Cloud c;
-		glm::vec3 position = glm::vec3(rand() % 500 - 250, 200 + rand() % 100, rand() % 500 - 250);
-		glm::vec3 scale = glm::vec3(50.0f + rand() % 50, 25.0f, 50.0f + rand() % 50); // Random size
-		c.initialize(position, scale, "../../../lab2/facade3.jpg");
-		clouds.push_back(c);
-	}
-
-
+	skybox.initialize(glm::vec3(0, 0, 0), glm::vec3(1, 1, 1), "../../../lab2/textures/sky.png", 1);
+	//--------------------------------------------idk
+	Island island;
+	island.initialize(glm::vec3(0, 0.5, 0), glm::vec3(20, 20, 20), "../../../lab2/textures/facade1.jpg", "../../../lab2/island.obj");
+	Cloud cloud;
+	cloud.initialize(glm::vec3(200, 200, 200), glm::vec3(10, 10, 10), "../../../lab2/textures/facade1.jpg", "../../../lab2/cloud.obj");
+	Surface surface;
+	surface.initialize(glm::vec3(0, -22, 0), glm::vec3(20, 20, 20), "../../../lab2/textures/facade1.jpg", "../../../lab2/surface.obj");
 
 
 	// Camera setup
@@ -890,7 +1183,7 @@ int main(void)
 	glm::mat4 viewMatrix, projectionMatrix;
     glm::float32 FoV = 45;
 	glm::float32 zNear = 0.1f;
-	glm::float32 zFar = 2000.0f;
+	glm::float32 zFar = 3000.0f;
 	projectionMatrix = glm::perspective(glm::radians(FoV), 4.0f / 3.0f, zNear, zFar);
 	std::cout << "Initial lookat: (" << lookat.x << ", " << lookat.y << ", " << lookat.z << ")\n";
 
@@ -915,16 +1208,15 @@ int main(void)
 		skybox.render(vpSkybox);
 		glDepthMask(GL_TRUE);
 		glDepthFunc(GL_LESS);
-		for (size_t i = 0; i < buildings.size(); ++i) {
-			buildings[i].render(vp);
-		}
+		island.render(vp);
+		surface.render(vp);
+
+		cloud.render(vp);
+		//for (size_t i = 0; i < buildings.size(); ++i) {
+		//	buildings[i].render(vp);
+		//}
 		
 
-		glm::mat4 viewMatrixClouds = glm::mat4(glm::mat3(viewMatrix)); // Strip translation
-		glm::mat4 vpClouds = projectionMatrix * viewMatrixClouds;
-		for (auto& cloud : clouds) {
-			cloud.render(vpClouds);
-		}
 
 		// Swap buffers
 		glfwSwapBuffers(window);
@@ -932,13 +1224,12 @@ int main(void)
 
 	} // Check if the ESC key was pressed or the window was closed
 	while (!glfwWindowShouldClose(window));
+	island.cleanup();
 	for (size_t i = 0; i < buildings.size(); ++i) {
 		buildings[i].cleanup();
 	}
-	for (auto& cloud : clouds) {
-		cloud.cleanup();
-	}
-
+	cloud.cleanup();
+	surface.cleanup();
 	skybox.cleanup();
 	// Close OpenGL window and terminate GLFW
 	glfwTerminate();

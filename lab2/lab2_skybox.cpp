@@ -2,22 +2,21 @@
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
-#include <iostream>
-#include <render/shader.h>
-#include <random>
-#include <ctime> // Add this for time()
-#include <fstream>   // For file streams like std::ifstream
-#include <sstream>   // For std::istringstream
-#include <vector>    // For std::vector
-#include <string>    // For std::string
-#include <glm/vec3.hpp> // For glm::vec3
-#include <tiny_gltf.h>
+#include <glm/gtc/type_ptr.hpp>
+#include <glm/gtx/string_cast.hpp>
 
+// GLTF model loader
+#define TINYGLTF_IMPLEMENTATION
 #define STB_IMAGE_IMPLEMENTATION
-#include <stb/stb_image.h>
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include <tiny_gltf.h>
+#include <iomanip>
+
+#include <render/shader.h>
+#include <vector>
+#include <iostream>
 #define _USE_MATH_DEFINES
 #include <math.h>
-
 static GLFWwindow *window;
 static void key_callback(GLFWwindow *window, int key, int scancode, int action, int mode);
 
@@ -31,6 +30,7 @@ static glm::vec3 lastLookat = lookat; // Store the last known lookat value
 static float viewAzimuth = 0.f;
 static float viewPolar = 0.f;
 static float viewDistance = 3000.0f;
+
 void loadOBJfromTinkerCad(const char* filepath, std::vector<GLfloat>& vertices,
 	std::vector<GLfloat>& uvs, std::vector<GLuint>& indices) {
 	std::ifstream file(filepath);
@@ -1149,295 +1149,7 @@ void loadOBJWithNormals(const char* filepath, std::vector<GLfloat>& vertices,
 		}
 	}
 }
-class Model {
-public:
-	glm::vec3 position;
-	glm::vec3 scale;
-	std::string objPath;
-	std::string mtlPath;
 
-	std::vector<GLfloat> vertices;
-	std::vector<GLfloat> uvs;
-	std::vector<GLfloat> normals;
-	std::vector<GLuint> indices;
-
-	// OpenGL Buffers
-	GLuint vertexArrayID;
-	GLuint vertexBufferID;
-	GLuint uvBufferID;
-	GLuint normalBufferID;
-	GLuint indexBufferID;
-
-	// Shader Variable IDs
-	GLuint mvpMatrixID;
-	GLuint textureSamplerID;
-	GLuint programID;
-
-	std::map<std::string, GLuint> textureMap;
-
-	Model() {}
-	void loadOBJWithMTL(const char* objFile, const char* mtlFile, std::vector<GLfloat>& vertices, std::vector<GLfloat>& uvs,
-		std::vector<GLfloat>& normals, std::vector<GLuint>& indices, std::map<std::string, GLuint>& textureMap) {
-		std::ifstream objStream(objFile);
-		if (!objStream.is_open()) {
-			std::cerr << "Error: Cannot open OBJ file " << objFile << std::endl;
-			return;
-		}
-
-		std::ifstream mtlStream(mtlFile);
-		if (!mtlStream.is_open()) {
-			std::cerr << "Error: Cannot open MTL file " << mtlFile << std::endl;
-			return;
-		}
-
-
-		std::map<std::string, std::string> materials;
-		std::string currentMaterial;
-		std::string line;
-
-		//Read the MTL file
-		while (std::getline(mtlStream, line))
-		{
-			std::istringstream ss(line);
-			std::string prefix;
-			ss >> prefix;
-
-			if (prefix == "newmtl")
-			{
-				ss >> currentMaterial;
-			}
-			else if (prefix == "map_Kd")
-			{
-				std::string texturePath;
-				ss >> texturePath;
-				materials[currentMaterial] = texturePath;
-			}
-		}
-		std::map<std::string, GLuint> loadedTextures; // Texture cache
-
-		std::vector<glm::vec3> temp_vertices;
-		std::vector<glm::vec2> temp_uvs;
-		std::vector<glm::vec3> temp_normals;
-		std::map<std::string, int> materialMap; // Map material name to start index for faces
-
-		// Parse obj file
-		while (std::getline(objStream, line)) {
-			std::istringstream ss(line);
-			std::string prefix;
-			ss >> prefix;
-
-			if (prefix == "v") {
-				glm::vec3 vertex;
-				ss >> vertex.x >> vertex.y >> vertex.z;
-				temp_vertices.push_back(vertex);
-			}
-			else if (prefix == "vt") {
-				glm::vec2 uv;
-				ss >> uv.x >> uv.y;
-				temp_uvs.push_back(uv);
-			}
-			else if (prefix == "vn") {
-				glm::vec3 normal;
-				ss >> normal.x >> normal.y >> normal.z;
-				temp_normals.push_back(normal);
-			}
-			else if (prefix == "usemtl")
-			{
-				ss >> currentMaterial;
-				materialMap[currentMaterial] = indices.size();
-			}
-			else if (prefix == "f") {
-				GLuint vertexIndex[3], uvIndex[3], normalIndex[3];
-				char separator;
-
-				for (int i = 0; i < 3; ++i) {
-					ss >> vertexIndex[i] >> separator >> uvIndex[i] >> separator >> normalIndex[i];
-					indices.push_back(vertexIndex[i] - 1);
-
-					glm::vec3 vertex = temp_vertices[vertexIndex[i] - 1];
-					glm::vec2 uv = temp_uvs[uvIndex[i] - 1];
-					glm::vec3 normal = temp_normals[normalIndex[i] - 1];
-
-					vertices.push_back(vertex.x);
-					vertices.push_back(vertex.y);
-					vertices.push_back(vertex.z);
-
-					uvs.push_back(uv.x);
-					uvs.push_back(uv.y);
-
-					normals.push_back(normal.x);
-					normals.push_back(normal.y);
-					normals.push_back(normal.z);
-				}
-			}
-		}
-
-
-		// Load textures, if they have not been loaded before, cache them
-		for (const auto& mat : materials) {
-			const std::string& matName = mat.first;
-			const std::string& texturePath = mat.second;
-
-			// Ensure the texture path is valid
-			if (texturePath.empty()) {
-				std::cerr << "Error: No texture path provided for material " << matName << std::endl;
-				continue; //Skip to the next material
-			}
-			if (loadedTextures.find(texturePath) == loadedTextures.end()) {
-				GLuint texture = LoadTextureTileBox(texturePath.c_str());
-				textureMap[matName] = texture;
-				loadedTextures[texturePath] = texture;
-
-			}
-			else
-			{
-				textureMap[matName] = loadedTextures[texturePath];
-			}
-		}
-
-	}
-
-	void initialize(glm::vec3 position, glm::vec3 scale, std::string objPath, std::string mtlPath) {
-		this->position = position;
-		this->scale = scale;
-		this->objPath = objPath;
-		this->mtlPath = mtlPath;
-
-
-		loadOBJWithMTL(objPath.c_str(), mtlPath.c_str(), vertices, uvs, normals, indices, textureMap);
-		// Create vertex array object
-		glGenVertexArrays(1, &vertexArrayID);
-		glBindVertexArray(vertexArrayID);
-
-		// Create vertex buffer object
-		glGenBuffers(1, &vertexBufferID);
-		glBindBuffer(GL_ARRAY_BUFFER, vertexBufferID);
-		glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(GLfloat), vertices.data(), GL_STATIC_DRAW);
-
-
-		// Create uv buffer object
-		glGenBuffers(1, &uvBufferID);
-		glBindBuffer(GL_ARRAY_BUFFER, uvBufferID);
-		glBufferData(GL_ARRAY_BUFFER, uvs.size() * sizeof(GLfloat), uvs.data(), GL_STATIC_DRAW);
-
-		// Create normal buffer object
-		glGenBuffers(1, &normalBufferID);
-		glBindBuffer(GL_ARRAY_BUFFER, normalBufferID);
-		glBufferData(GL_ARRAY_BUFFER, normals.size() * sizeof(GLfloat), normals.data(), GL_STATIC_DRAW);
-
-		// Create index buffer object
-		glGenBuffers(1, &indexBufferID);
-		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBufferID);
-		glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(GLuint), indices.data(), GL_STATIC_DRAW);
-
-
-		// Load Shaders
-		programID = LoadShadersFromFile("../../../lab2/shaders/model.vert", "../../../lab2/shaders/model.frag");
-		if (programID == 0)
-		{
-			std::cerr << "Failed to load model shaders." << std::endl;
-		}
-		mvpMatrixID = glGetUniformLocation(programID, "MVP");
-		textureSamplerID = glGetUniformLocation(programID, "textureSampler");
-	}
-	void render(glm::mat4 cameraMatrix) {
-		glUseProgram(programID);
-
-		// Vertex attribute
-		glEnableVertexAttribArray(0);
-		glBindBuffer(GL_ARRAY_BUFFER, vertexBufferID);
-		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
-
-		// UV attribute
-		glEnableVertexAttribArray(1);
-		glBindBuffer(GL_ARRAY_BUFFER, uvBufferID);
-		glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, 0);
-
-		// Normal attribute
-		glEnableVertexAttribArray(2);
-		glBindBuffer(GL_ARRAY_BUFFER, normalBufferID);
-		glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 0, 0);
-
-		// Index buffer
-		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBufferID);
-
-		// Model matrix
-		glm::mat4 modelMatrix = glm::mat4(1.0f);
-		modelMatrix = glm::translate(modelMatrix, position);
-		modelMatrix = glm::scale(modelMatrix, scale);
-
-		// MVP Matrix
-		glm::mat4 mvp = cameraMatrix * modelMatrix;
-		glUniformMatrix4fv(mvpMatrixID, 1, GL_FALSE, &mvp[0][0]);
-
-		// Iterate through the material mapping
-		int currentMaterialStart = 0;
-		std::string previousMaterial = "";
-		for (const auto& mat : textureMap) {
-			const std::string& matName = mat.first;
-			GLuint texture = mat.second;
-			glActiveTexture(GL_TEXTURE0);
-			glBindTexture(GL_TEXTURE_2D, texture);
-			glUniform1i(textureSamplerID, 0);
-
-			// Draw elements
-			size_t indexCount = indices.size();
-			if (indices.size() > currentMaterialStart)
-			{
-				if (previousMaterial != "") {
-					int start_index = 0;
-					for (const auto& prevMat : textureMap)
-					{
-						if (previousMaterial == prevMat.first)
-						{
-
-							for (int i = 0; i < indices.size(); i++)
-							{
-								bool found = false;
-								for (const auto& currMat : textureMap)
-								{
-									if (matName == currMat.first)
-									{
-										found = true;
-										break;
-									}
-								}
-								if (found) {
-
-									glDrawElements(GL_TRIANGLES, indices.size() - start_index, GL_UNSIGNED_INT, (void*)(start_index * sizeof(GLuint)));
-									break;
-								}
-							}
-
-							break;
-						}
-
-						start_index += indices.size();
-					}
-
-				}
-				else
-					glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, 0);
-			}
-			previousMaterial = matName;
-		}
-
-		glDisableVertexAttribArray(0);
-		glDisableVertexAttribArray(1);
-		glDisableVertexAttribArray(2);
-	}
-	void cleanup() {
-		glDeleteBuffers(1, &vertexBufferID);
-		glDeleteBuffers(1, &uvBufferID);
-		glDeleteBuffers(1, &normalBufferID);
-		glDeleteBuffers(1, &indexBufferID);
-		glDeleteVertexArrays(1, &vertexArrayID);
-		glDeleteProgram(programID);
-		for (const auto& texture : textureMap) {
-			glDeleteTextures(1, &texture.second);
-		}
-	}
-};
 int main(void)
 {
 	// Initialise GLFW
@@ -1521,8 +1233,7 @@ int main(void)
 	position = glm::vec3(-300, -273 + (2 * 64), 328);
 	b6.initialize(position, size, "../../../lab2/textures/facade3.jpg", 2);
 	buildings.push_back(b6);
-	Model loadedModel;
-	loadedModel.initialize(glm::vec3(0, 0, 0), glm::vec3(100, 100, 100), "../../../lab2/untitled.obj", "../../../lab2/untitled.mtl");
+
 	//skybox-------------------------------------
 	glm::vec3 skyboxScale(30,30,30); // Add margin
 	skyBox skybox;
@@ -1570,14 +1281,13 @@ int main(void)
 		skybox.render(vpSkybox);
 		glDepthMask(GL_TRUE);
 		glDepthFunc(GL_LESS);
-		//island.render(vp);
-		//surface.render(vp);
-		//spire.render(vp);
-		//cloud.render(vp);
-		//for (size_t i = 0; i < buildings.size(); ++i) {
-		//	buildings[i].render(vp);
-		//}
-		loadedModel.render(vp);
+		island.render(vp);
+		surface.render(vp);
+		spire.render(vp);
+		cloud.render(vp);
+		for (size_t i = 0; i < buildings.size(); ++i) {
+			buildings[i].render(vp);
+		}
 
 
 
@@ -1595,7 +1305,6 @@ int main(void)
 	surface.cleanup();
 	skybox.cleanup();
 	spire.cleanup();
-	loadedModel.cleanup();
 
 	// Close OpenGL window and terminate GLFW
 	glfwTerminate();

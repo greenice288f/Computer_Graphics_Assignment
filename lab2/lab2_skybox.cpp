@@ -95,6 +95,98 @@ void loadOBJfromTinkerCad(const char* filepath, std::vector<GLfloat>& vertices,
 		vertices.push_back(v.z);
 	}
 }
+void betterLoader(const char* filepath, std::vector<GLfloat>& vertices,
+	std::vector<GLfloat>& uvs, std::vector<GLuint>& indices) {
+	std::ifstream file(filepath);
+	if (!file.is_open()) {
+		std::cerr << "Error: Cannot open OBJ file " << filepath << std::endl;
+		return;
+	}
+
+	std::string line;
+	std::vector<glm::vec3> temp_vertices;
+	std::vector<glm::vec2> temp_uvs;
+	bool hasUVs = false;
+
+	while (std::getline(file, line)) {
+		std::istringstream ss(line);
+		std::string prefix;
+		ss >> prefix;
+
+		if (prefix == "v") { // Vertex
+			glm::vec3 vertex;
+			ss >> vertex.x >> vertex.y >> vertex.z;
+			temp_vertices.push_back(vertex);
+		}
+		else if (prefix == "vt") { // Texture coordinate
+			glm::vec2 uv;
+			ss >> uv.x >> uv.y;
+			temp_uvs.push_back(uv);
+			hasUVs = true; // Set the flag since we found a vt line
+		}
+		else if (prefix == "f") { // Face
+			GLuint vertexIndex[3], uvIndex[3];
+			char separator;
+			std::string vertexData;
+
+			if (hasUVs) {
+				for (int i = 0; i < 3; ++i) {
+					ss >> vertexData;
+
+					// Parse the format v/vt//vn or v//vn
+					size_t firstSlash = vertexData.find('/');
+					size_t secondSlash = vertexData.find('/', firstSlash + 1);
+
+					if (secondSlash != std::string::npos) {
+						// v//vn or v/vt//vn format
+						vertexIndex[i] = std::stoi(vertexData.substr(0, firstSlash)) - 1;
+						uvIndex[i] = (secondSlash - firstSlash > 1) ? std::stoi(vertexData.substr(firstSlash + 1, secondSlash - firstSlash - 1)) - 1 : 0;
+					}
+					else {
+						// v/vt format
+						vertexIndex[i] = std::stoi(vertexData.substr(0, firstSlash)) - 1;
+						uvIndex[i] = std::stoi(vertexData.substr(firstSlash + 1)) - 1;
+					}
+
+					indices.push_back(vertexIndex[i]);
+				}
+
+				for (int i = 0; i < 3; ++i) {
+					uvs.push_back(temp_uvs[uvIndex[i]].x);
+					uvs.push_back(temp_uvs[uvIndex[i]].y);
+				}
+			}
+			else {
+				for (int i = 0; i < 3; ++i) {
+					ss >> vertexData;
+
+					// Parse the format v//vn
+					size_t firstSlash = vertexData.find('/');
+
+					if (firstSlash != std::string::npos) {
+						vertexIndex[i] = std::stoi(vertexData.substr(0, firstSlash)) - 1;
+					}
+					else {
+						vertexIndex[i] = std::stoi(vertexData) - 1;
+					}
+
+					indices.push_back(vertexIndex[i]);
+				}
+
+				for (int i = 0; i < 3; i++) {
+					uvs.push_back(0.0f);
+					uvs.push_back(0.0f);
+				}
+			}
+		}
+	}
+
+	for (const auto& v : temp_vertices) {
+		vertices.push_back(v.x);
+		vertices.push_back(v.y);
+		vertices.push_back(v.z);
+	}
+}
 
 static GLuint LoadTextureTileBox(const char *texture_file_path) {
     int w, h, channels;
@@ -148,7 +240,7 @@ struct Island {
         this->position = position;
         this->scale = scale;
         this->texture = texturePath;
-		loadOBJfromTinkerCad(objPath, vertices, uvs, indices);
+		betterLoader(objPath, vertices, uvs, indices);
 
 		colors.resize(vertices.size());
 		// Generate brownish colors with different lighting
@@ -688,7 +780,7 @@ struct Surface {
 		this->position = position;
 		this->scale = scale;
 		this->texture = texturePath;
-		loadOBJfromTinkerCad(objPath, vertices, uvs, indices);
+		betterLoader(objPath, vertices, uvs, indices);
 
 		colors.resize(vertices.size());
 		// Generate colors based on vertex index
@@ -788,6 +880,7 @@ struct Surface {
 		glDeleteProgram(programID);
 	}
 };
+
 struct Building {
 	glm::vec3 position;		// Position of the box 
 	glm::vec3 scale;		// Size of the box in each axis
@@ -1089,66 +1182,156 @@ struct Building {
 		glDeleteProgram(programID);
 	}
 };
-void loadOBJWithNormals(const char* filepath, std::vector<GLfloat>& vertices,
-	std::vector<GLfloat>& uvs, std::vector<GLfloat>& normals,
-	std::vector<GLuint>& indices) {
-	std::ifstream file(filepath);
-	if (!file.is_open()) {
-		std::cerr << "Error: Cannot open OBJ file " << filepath << std::endl;
-		return;
+
+struct GLBModel {
+	glm::vec3 position;
+	glm::vec3 scale;
+
+	GLuint vertexBufferID;
+	GLuint uvBufferID;
+	GLuint indexBufferID;
+	GLuint textureID;
+
+	GLuint programID;
+	GLuint mvpMatrixID;
+	GLuint textureSamplerID;
+
+	std::vector<GLuint> indices; // Store indices as a member of the struct
+
+	void initializeGLB(glm::vec3 position, glm::vec3 scale, const std::string& glbPath) {
+		this->position = position;
+		this->scale = scale;
+
+		std::vector<GLfloat> vertices;
+		std::vector<GLfloat> uvs;
+
+		loadGLBModel(glbPath, vertices, uvs, indices, textureID);
+
+		// Create buffers for vertices, UVs, and indices
+		glGenBuffers(1, &vertexBufferID);
+		glBindBuffer(GL_ARRAY_BUFFER, vertexBufferID);
+		glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(GLfloat), vertices.data(), GL_STATIC_DRAW);
+
+		glGenBuffers(1, &uvBufferID);
+		glBindBuffer(GL_ARRAY_BUFFER, uvBufferID);
+		glBufferData(GL_ARRAY_BUFFER, uvs.size() * sizeof(GLfloat), uvs.data(), GL_STATIC_DRAW);
+
+		glGenBuffers(1, &indexBufferID);
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBufferID);
+		glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(GLuint), indices.data(), GL_STATIC_DRAW);
+
+		// Load Shaders
+		programID = LoadShadersFromFile("../../../lab2/shaders/box.vert", "../../../lab2/shaders/box.frag");
+		mvpMatrixID = glGetUniformLocation(programID, "MVP");
+		textureSamplerID = glGetUniformLocation(programID, "textureSampler");
 	}
 
-	std::vector<glm::vec3> temp_vertices;
-	std::vector<glm::vec2> temp_uvs;
-	std::vector<glm::vec3> temp_normals;
+	void render(glm::mat4 cameraMatrix) {
+		glUseProgram(programID);
 
-	std::string line;
-	while (std::getline(file, line)) {
-		std::istringstream ss(line);
-		std::string prefix;
-		ss >> prefix;
+		// Vertex Attribute
+		glEnableVertexAttribArray(0);
+		glBindBuffer(GL_ARRAY_BUFFER, vertexBufferID);
+		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
 
-		if (prefix == "v") {
-			glm::vec3 vertex;
-			ss >> vertex.x >> vertex.y >> vertex.z;
-			temp_vertices.push_back(vertex);
-		}
-		else if (prefix == "vt") {
-			glm::vec2 uv;
-			ss >> uv.x >> uv.y;
-			temp_uvs.push_back(uv);
-		}
-		else if (prefix == "vn") {
-			glm::vec3 normal;
-			ss >> normal.x >> normal.y >> normal.z;
-			temp_normals.push_back(normal);
-		}
-		else if (prefix == "f") {
-			GLuint vertexIndex[3], uvIndex[3], normalIndex[3];
-			char separator;
+		// UV Attribute
+		glEnableVertexAttribArray(1);
+		glBindBuffer(GL_ARRAY_BUFFER, uvBufferID);
+		glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
 
-			for (int i = 0; i < 3; ++i) {
-				ss >> vertexIndex[i] >> separator >> uvIndex[i] >> separator >> normalIndex[i];
-				indices.push_back(vertexIndex[i] - 1);
+		// Bind index buffer
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBufferID);
 
-				glm::vec3 vertex = temp_vertices[vertexIndex[i] - 1];
-				glm::vec2 uv = temp_uvs[uvIndex[i] - 1];
-				glm::vec3 normal = temp_normals[normalIndex[i] - 1];
+		// Set the MVP matrix
+		glm::mat4 modelMatrix = glm::mat4(1.0f);
+		modelMatrix = glm::translate(modelMatrix, position);
+		modelMatrix = glm::scale(modelMatrix, scale);
+		glm::mat4 mvp = cameraMatrix * modelMatrix;
+		glUniformMatrix4fv(mvpMatrixID, 1, GL_FALSE, &mvp[0][0]);
 
-				vertices.push_back(vertex.x);
-				vertices.push_back(vertex.y);
-				vertices.push_back(vertex.z);
+		// Bind Texture
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, textureID);
+		glUniform1i(textureSamplerID, 0);
 
-				uvs.push_back(uv.x);
-				uvs.push_back(uv.y);
+		// Draw the model
+		glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, nullptr);
 
-				normals.push_back(normal.x);
-				normals.push_back(normal.y);
-				normals.push_back(normal.z);
-			}
-		}
+		glDisableVertexAttribArray(0);
+		glDisableVertexAttribArray(1);
 	}
-}
+
+	void cleanup() {
+		glDeleteBuffers(1, &vertexBufferID);
+		glDeleteBuffers(1, &uvBufferID);
+		glDeleteBuffers(1, &indexBufferID);
+		glDeleteTextures(1, &textureID);
+		glDeleteProgram(programID);
+	}
+
+private:
+	void loadGLBModel(const std::string& filename,
+		std::vector<GLfloat>& vertices,
+		std::vector<GLfloat>& uvs,
+		std::vector<GLuint>& indices,
+		GLuint& textureID) {
+		tinygltf::Model model;
+		tinygltf::TinyGLTF loader;
+		std::string err, warn;
+
+		if (!loader.LoadBinaryFromFile(&model, &err, &warn, filename)) {
+			throw std::runtime_error("Failed to load GLB file: " + filename + "\n" + err);
+		}
+
+		if (!warn.empty()) {
+			std::cerr << "GLTF Warning: " << warn << std::endl;
+		}
+
+		// Assume single mesh for simplicity
+		const tinygltf::Mesh& mesh = model.meshes[0];
+		const tinygltf::Accessor& posAccessor = model.accessors[mesh.primitives[0].attributes.at("POSITION")];
+		const tinygltf::BufferView& posBufferView = model.bufferViews[posAccessor.bufferView];
+		const tinygltf::Buffer& posBuffer = model.buffers[posBufferView.buffer];
+
+		const tinygltf::Accessor& uvAccessor = model.accessors[mesh.primitives[0].attributes.at("TEXCOORD_0")];
+		const tinygltf::BufferView& uvBufferView = model.bufferViews[uvAccessor.bufferView];
+		const tinygltf::Buffer& uvBuffer = model.buffers[uvBufferView.buffer];
+
+		const tinygltf::Accessor& indexAccessor = model.accessors[mesh.primitives[0].indices];
+		const tinygltf::BufferView& indexBufferView = model.bufferViews[indexAccessor.bufferView];
+		const tinygltf::Buffer& indexBuffer = model.buffers[indexBufferView.buffer];
+
+		// Extract positions
+		const float* positions = reinterpret_cast<const float*>(&posBuffer.data[posBufferView.byteOffset]);
+		for (size_t i = 0; i < posAccessor.count; ++i) {
+			vertices.push_back(positions[i * 3 + 0]); // x
+			vertices.push_back(positions[i * 3 + 1]); // y
+			vertices.push_back(positions[i * 3 + 2]); // z
+		}
+
+		// Extract UVs
+		const float* texcoords = reinterpret_cast<const float*>(&uvBuffer.data[uvBufferView.byteOffset]);
+		for (size_t i = 0; i < uvAccessor.count; ++i) {
+			uvs.push_back(texcoords[i * 2 + 0]); // u
+			uvs.push_back(texcoords[i * 2 + 1]); // v
+		}
+
+		// Extract indices
+		const unsigned short* indicesData = reinterpret_cast<const unsigned short*>(&indexBuffer.data[indexBufferView.byteOffset]);
+		for (size_t i = 0; i < indexAccessor.count; ++i) {
+			indices.push_back(indicesData[i]);
+		}
+
+		// Load texture (assuming one texture for simplicity)
+		const tinygltf::Texture& texture = model.textures[0];
+		const tinygltf::Image& image = model.images[texture.source];
+
+		glGenTextures(1, &textureID);
+		glBindTexture(GL_TEXTURE_2D, textureID);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image.width, image.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, image.image.data());
+		glGenerateMipmap(GL_TEXTURE_2D);
+	}
+};
 
 int main(void)
 {
@@ -1194,7 +1377,21 @@ int main(void)
 
 	// TODO: Create more buildings
     // ---------------------------
+	std::vector<GLfloat> vertex_buffer_data;
+	std::vector<GLfloat> uv_buffer_data;
+	std::vector<GLuint> index_buffer_data;
 
+	GLBModel model;
+	try {
+		// Initialize the GLB model
+		model.initializeGLB(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(1.0f, 1.0f, 1.0f), "../../../lab2/untitled.glb");
+	}
+	catch (const std::exception& e) {
+		std::cerr << "Error: " << e.what() << std::endl;
+		glfwDestroyWindow(window);
+		glfwTerminate();
+		return -1;
+	}
 	std::vector<Building> buildings;
 
 	int gridSize = 4;            // Number of buildings along X and Z axes
@@ -1202,35 +1399,35 @@ int main(void)
 	Building b1;
 	glm::vec3 position;
 
-	position = glm::vec3(-300, -273+(3 * 64), -400);
+	position = glm::vec3(-300, -473+(3 * 64), -400);
 	glm::vec3 size = glm::vec3(64, 3* 64, 64);
 	b1.initialize(position, size, "../../../lab2/textures/facade4.jpg", 3);
 	buildings.push_back(b1);
 
 	Building b2;
-	position = glm::vec3(-300, -273 + (3 * 64), -272);
+	position = glm::vec3(-300, -473 + (3 * 64), -272);
 	b2.initialize(position, size, "../../../lab2/textures/facade4.jpg", 3);
 	buildings.push_back(b2);
 
 	size = glm::vec3(64, 4 * 64, 64);
 	Building b3;
-	position = glm::vec3(-300, -273 + (4 * 64), -100);
+	position = glm::vec3(-300, -473 + (4 * 64), -100);
 	b3.initialize(position, size, "../../../lab2/textures/facade1.jpg", 4);
 	buildings.push_back(b3);
 	
 	Building b4;
-	position = glm::vec3(-300, -273 + (4 * 64), 28);
+	position = glm::vec3(-300, -473 + (4 * 64), 28);
 	b4.initialize(position, size, "../../../lab2/textures/facade1.jpg", 4);
 	buildings.push_back(b4);
 
 	size = glm::vec3(64, 2 * 64, 64);
 	Building b5;
-	position = glm::vec3(-300, -273 + (2 * 64), 200);
+	position = glm::vec3(-300, -473 + (2 * 64), 200);
 	b5.initialize(position, size, "../../../lab2/textures/facade3.jpg", 2);
 	buildings.push_back(b5);
 
 	Building b6;
-	position = glm::vec3(-300, -273 + (2 * 64), 328);
+	position = glm::vec3(-300, -473 + (2 * 64), 328);
 	b6.initialize(position, size, "../../../lab2/textures/facade3.jpg", 2);
 	buildings.push_back(b6);
 
@@ -1240,13 +1437,13 @@ int main(void)
 	skybox.initialize(glm::vec3(0, 0, 0), glm::vec3(1, 1, 1), "../../../lab2/textures/sky.png", 1);
 	//--------------------------------------------idk
 	Island island;
-	island.initialize(glm::vec3(0, 0.5, 0), glm::vec3(20, 20, 20), "../../../lab2/textures/facade1.jpg", "../../../lab2/island.obj");
+	island.initialize(glm::vec3(0, 0, 0), glm::vec3(20, 20, 20), "../../../lab2/textures/facade1.jpg", "../../../lab2/test.obj");
 	Cloud cloud;
 	cloud.initialize(glm::vec3(200, 200, 200), glm::vec3(5, 5, 5), "../../../lab2/textures/facade1.jpg", "../../../lab2/cloud.obj");
 	Surface surface;
-	surface.initialize(glm::vec3(0, -20, 0), glm::vec3(20, 20, 20), "../../../lab2/textures/facade1.jpg", "../../../lab2/surface.obj");
+	surface.initialize(glm::vec3(0, 3, 0), glm::vec3(20, 20, 20), "../../../lab2/textures/facade1.jpg", "../../../lab2/testsurface.obj");
 	Cloud spire;
-	spire.initialize(glm::vec3(250, -250, 800), glm::vec3(5, 10, 5), "../../../lab2/textures/facade1.jpg", "../../../lab2/spire.obj");
+	spire.initialize(glm::vec3(250, -400, 1200), glm::vec3(5, 10, 5), "../../../lab2/textures/facade1.jpg", "../../../lab2/spire.obj");
 
 	// Camera setup
     eye_center.y = viewDistance * cos(viewPolar);
@@ -1284,13 +1481,12 @@ int main(void)
 		island.render(vp);
 		surface.render(vp);
 		spire.render(vp);
-		cloud.render(vp);
+		//cloud.render(vp);
 		for (size_t i = 0; i < buildings.size(); ++i) {
 			buildings[i].render(vp);
 		}
-
-
-
+		glm::mat4 mvp = projectionMatrix * viewMatrix; // Replace with your MVP calculation
+		model.render(mvp);
 		// Swap buffers
 		glfwSwapBuffers(window);
 		glfwPollEvents();
@@ -1305,7 +1501,7 @@ int main(void)
 	surface.cleanup();
 	skybox.cleanup();
 	spire.cleanup();
-
+	model.cleanup();
 	// Close OpenGL window and terminate GLFW
 	glfwTerminate();
 

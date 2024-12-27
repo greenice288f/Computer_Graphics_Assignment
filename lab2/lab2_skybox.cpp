@@ -884,6 +884,8 @@ struct Surface {
 struct Building {
 	glm::vec3 position;		// Position of the box 
 	glm::vec3 scale;		// Size of the box in each axis
+	glm::vec3 rotation;   // Initial rotation (in degrees) around X, Y, Z axes
+
 	char* texture;
 	int height;
 	GLfloat vertex_buffer_data[72] = {	// Vertex definition for a canonical box
@@ -1037,12 +1039,14 @@ struct Building {
 	GLuint textureSamplerID;
 	GLuint programID;
 
-	void initialize(glm::vec3 position, glm::vec3 scale, char* texture, int height) {
+	void initialize(glm::vec3 position, glm::vec3 scale, char* texture, int height, glm::vec3 rotation = glm::vec3(0.0f)) {
 		// Define scale of the building geometry
 		this->position = position;
 		this->scale = scale;
 		this->texture = texture;
 		this->height = height;
+		this->rotation = rotation;
+
 		for (int i = 0; i < 72; ++i) color_buffer_data[i] = 1.0f;
 
 		// Create a vertex array object
@@ -1139,6 +1143,9 @@ struct Building {
 		glm::mat4 modelMatrix = glm::mat4();
 		// Scale the box along each axis to make it look like a building
 		modelMatrix = glm::translate(modelMatrix, position);
+		modelMatrix = glm::rotate(modelMatrix, glm::radians(rotation.x), glm::vec3(1.0f, 0.0f, 0.0f)); // X-axis rotation
+		modelMatrix = glm::rotate(modelMatrix, glm::radians(rotation.y), glm::vec3(0.0f, 1.0f, 0.0f)); // Y-axis rotation
+		modelMatrix = glm::rotate(modelMatrix, glm::radians(rotation.z), glm::vec3(0.0f, 0.0f, 1.0f)); // Z-axis rotation
 		modelMatrix = glm::scale(modelMatrix, scale);
 
 		// -----------------------
@@ -1177,161 +1184,94 @@ struct Building {
 		glDeleteBuffers(1, &colorBufferID);
 		glDeleteBuffers(1, &indexBufferID);
 		glDeleteVertexArrays(1, &vertexArrayID);
-		//glDeleteBuffers(1, &uvBufferID);
-		//glDeleteTextures(1, &textureID);
-		glDeleteProgram(programID);
-	}
-};
-
-struct GLBModel {
-	glm::vec3 position;
-	glm::vec3 scale;
-
-	GLuint vertexBufferID;
-	GLuint uvBufferID;
-	GLuint indexBufferID;
-	GLuint textureID;
-
-	GLuint programID;
-	GLuint mvpMatrixID;
-	GLuint textureSamplerID;
-
-	std::vector<GLuint> indices; // Store indices as a member of the struct
-
-	void initializeGLB(glm::vec3 position, glm::vec3 scale, const std::string& glbPath) {
-		this->position = position;
-		this->scale = scale;
-
-		std::vector<GLfloat> vertices;
-		std::vector<GLfloat> uvs;
-
-		loadGLBModel(glbPath, vertices, uvs, indices, textureID);
-
-		// Create buffers for vertices, UVs, and indices
-		glGenBuffers(1, &vertexBufferID);
-		glBindBuffer(GL_ARRAY_BUFFER, vertexBufferID);
-		glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(GLfloat), vertices.data(), GL_STATIC_DRAW);
-
-		glGenBuffers(1, &uvBufferID);
-		glBindBuffer(GL_ARRAY_BUFFER, uvBufferID);
-		glBufferData(GL_ARRAY_BUFFER, uvs.size() * sizeof(GLfloat), uvs.data(), GL_STATIC_DRAW);
-
-		glGenBuffers(1, &indexBufferID);
-		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBufferID);
-		glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(GLuint), indices.data(), GL_STATIC_DRAW);
-
-		// Load Shaders
-		programID = LoadShadersFromFile("../../../lab2/shaders/box.vert", "../../../lab2/shaders/box.frag");
-		mvpMatrixID = glGetUniformLocation(programID, "MVP");
-		textureSamplerID = glGetUniformLocation(programID, "textureSampler");
-	}
-
-	void render(glm::mat4 cameraMatrix) {
-		glUseProgram(programID);
-
-		// Vertex Attribute
-		glEnableVertexAttribArray(0);
-		glBindBuffer(GL_ARRAY_BUFFER, vertexBufferID);
-		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
-
-		// UV Attribute
-		glEnableVertexAttribArray(1);
-		glBindBuffer(GL_ARRAY_BUFFER, uvBufferID);
-		glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
-
-		// Bind index buffer
-		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBufferID);
-
-		// Set the MVP matrix
-		glm::mat4 modelMatrix = glm::mat4(1.0f);
-		modelMatrix = glm::translate(modelMatrix, position);
-		modelMatrix = glm::scale(modelMatrix, scale);
-		glm::mat4 mvp = cameraMatrix * modelMatrix;
-		glUniformMatrix4fv(mvpMatrixID, 1, GL_FALSE, &mvp[0][0]);
-
-		// Bind Texture
-		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_2D, textureID);
-		glUniform1i(textureSamplerID, 0);
-
-		// Draw the model
-		glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, nullptr);
-
-		glDisableVertexAttribArray(0);
-		glDisableVertexAttribArray(1);
-	}
-
-	void cleanup() {
-		glDeleteBuffers(1, &vertexBufferID);
 		glDeleteBuffers(1, &uvBufferID);
-		glDeleteBuffers(1, &indexBufferID);
 		glDeleteTextures(1, &textureID);
 		glDeleteProgram(programID);
 	}
+};
 
-private:
-	void loadGLBModel(const std::string& filename,
-		std::vector<GLfloat>& vertices,
-		std::vector<GLfloat>& uvs,
-		std::vector<GLuint>& indices,
-		GLuint& textureID) {
-		tinygltf::Model model;
-		tinygltf::TinyGLTF loader;
-		std::string err, warn;
+int randomInRange(int min, int max) {
+	return min + (std::rand() % (max - min + 1));
+}
+struct Scene {
+	std::vector<Building> buildings;
+	Island island;
+	Cloud cloud;
+	Surface surface;
+	Cloud spire;
 
-		if (!loader.LoadBinaryFromFile(&model, &err, &warn, filename)) {
-			throw std::runtime_error("Failed to load GLB file: " + filename + "\n" + err);
+	// Initialize all elements of the scene
+	void initialize(const glm::vec3& offset) {
+		// Initialize the grid of buildings
+		for (int x = -500; x + 300 <= 1000; x += 300) {
+			for (int y = 180; y + 300<= 1000; y += 300) {
+				int innerXMin = x + (300 - 150) / 2;
+				int innerXMax = innerXMin + 150;
+				int innerYMin = y + (300 - 150) / 2;
+				int innerYMax = innerYMin + 150;
+				float rotation = randomInRange(0, 90);
+				int randomX = randomInRange(innerXMin, innerXMax - 1);
+				int randomY = randomInRange(innerYMin, innerYMax - 1);
+				int cube = randomInRange(60,100);
+				glm::vec3 size = glm::vec3(cube, cube, cube);
+				glm::vec3 position = glm::vec3(randomX, -440 + (cube), randomY) + offset;
+				Building b1;
+				int texture = randomInRange(1, 6);
+				std::string texturePath = "../../../lab2/textures/facade" + std::to_string(texture) + ".jpg";
+				b1.initialize(position, size, "../../../lab2/textures/facade6.jpg", 1, glm::vec3(0.0f, rotation, 0.0f));
+				buildings.push_back(b1);
+			}
 		}
 
-		if (!warn.empty()) {
-			std::cerr << "GLTF Warning: " << warn << std::endl;
+		// Initialize the island
+		island.initialize(offset, glm::vec3(20, 20, 20), "../../../lab2/textures/facade1.jpg", "../../../lab2/test.obj");
+
+		// Initialize the cloud
+		cloud.initialize(offset + glm::vec3(200, 200, 200), glm::vec3(5, 5, 5), "../../../lab2/textures/facade1.jpg", "../../../lab2/cloud.obj");
+
+		// Initialize the surface
+		surface.initialize(offset + glm::vec3(0, 3, 0), glm::vec3(20, 20, 20), "../../../lab2/textures/facade1.jpg", "../../../lab2/testsurface.obj");
+
+		// Initialize the spire
+		spire.initialize(offset + glm::vec3(250, -400, 1200), glm::vec3(5, 10, 5), "../../../lab2/textures/facade1.jpg", "../../../lab2/spire.obj");
+	}
+
+	// Render all elements of the scene
+	void render(glm::mat4 vp){
+		// Render buildings
+		for (size_t i = 0; i < buildings.size(); ++i) {
+			buildings[i].render(vp);
 		}
 
-		// Assume single mesh for simplicity
-		const tinygltf::Mesh& mesh = model.meshes[0];
-		const tinygltf::Accessor& posAccessor = model.accessors[mesh.primitives[0].attributes.at("POSITION")];
-		const tinygltf::BufferView& posBufferView = model.bufferViews[posAccessor.bufferView];
-		const tinygltf::Buffer& posBuffer = model.buffers[posBufferView.buffer];
+		// Render other components
+		island.render(vp);
+		cloud.render(vp);
+		surface.render(vp);
+		spire.render(vp);
+	}
 
-		const tinygltf::Accessor& uvAccessor = model.accessors[mesh.primitives[0].attributes.at("TEXCOORD_0")];
-		const tinygltf::BufferView& uvBufferView = model.bufferViews[uvAccessor.bufferView];
-		const tinygltf::Buffer& uvBuffer = model.buffers[uvBufferView.buffer];
-
-		const tinygltf::Accessor& indexAccessor = model.accessors[mesh.primitives[0].indices];
-		const tinygltf::BufferView& indexBufferView = model.bufferViews[indexAccessor.bufferView];
-		const tinygltf::Buffer& indexBuffer = model.buffers[indexBufferView.buffer];
-
-		// Extract positions
-		const float* positions = reinterpret_cast<const float*>(&posBuffer.data[posBufferView.byteOffset]);
-		for (size_t i = 0; i < posAccessor.count; ++i) {
-			vertices.push_back(positions[i * 3 + 0]); // x
-			vertices.push_back(positions[i * 3 + 1]); // y
-			vertices.push_back(positions[i * 3 + 2]); // z
+	// Cleanup resources for the scene
+	void cleanup() {
+		// Cleanup buildings
+		for (size_t i = 0; i < buildings.size(); ++i) {
+			buildings[i].cleanup();
 		}
+		buildings.clear();
 
-		// Extract UVs
-		const float* texcoords = reinterpret_cast<const float*>(&uvBuffer.data[uvBufferView.byteOffset]);
-		for (size_t i = 0; i < uvAccessor.count; ++i) {
-			uvs.push_back(texcoords[i * 2 + 0]); // u
-			uvs.push_back(texcoords[i * 2 + 1]); // v
-		}
-
-		// Extract indices
-		const unsigned short* indicesData = reinterpret_cast<const unsigned short*>(&indexBuffer.data[indexBufferView.byteOffset]);
-		for (size_t i = 0; i < indexAccessor.count; ++i) {
-			indices.push_back(indicesData[i]);
-		}
-
-		// Load texture (assuming one texture for simplicity)
-		const tinygltf::Texture& texture = model.textures[0];
-		const tinygltf::Image& image = model.images[texture.source];
-
-		glGenTextures(1, &textureID);
-		glBindTexture(GL_TEXTURE_2D, textureID);
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image.width, image.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, image.image.data());
-		glGenerateMipmap(GL_TEXTURE_2D);
+		// Cleanup other components
+		island.cleanup();
+		cloud.cleanup();
+		surface.cleanup();
+		spire.cleanup();
 	}
 };
+struct Point2D {
+	int x;
+	int z;
+};
+
+
+
 
 int main(void)
 {
@@ -1375,87 +1315,48 @@ int main(void)
 	glEnable(GL_DEPTH_TEST);
 	glEnable(GL_CULL_FACE);
 
-	// TODO: Create more buildings
-    // ---------------------------
-	std::vector<GLfloat> vertex_buffer_data;
-	std::vector<GLfloat> uv_buffer_data;
-	std::vector<GLuint> index_buffer_data;
-
-	GLBModel model;
-	try {
-		// Initialize the GLB model
-		model.initializeGLB(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(1.0f, 1.0f, 1.0f), "../../../lab2/untitled.glb");
-	}
-	catch (const std::exception& e) {
-		std::cerr << "Error: " << e.what() << std::endl;
-		glfwDestroyWindow(window);
-		glfwTerminate();
-		return -1;
-	}
-	std::vector<Building> buildings;
-
-	int gridSize = 4;            // Number of buildings along X and Z axes
-	int spacing = 80;              // Spacing between buildings to represent streets
-	Building b1;
-	glm::vec3 position;
-
-	position = glm::vec3(-300, -473+(3 * 64), -400);
-	glm::vec3 size = glm::vec3(64, 3* 64, 64);
-	b1.initialize(position, size, "../../../lab2/textures/facade4.jpg", 3);
-	buildings.push_back(b1);
-
-	Building b2;
-	position = glm::vec3(-300, -473 + (3 * 64), -272);
-	b2.initialize(position, size, "../../../lab2/textures/facade4.jpg", 3);
-	buildings.push_back(b2);
-
-	size = glm::vec3(64, 4 * 64, 64);
-	Building b3;
-	position = glm::vec3(-300, -473 + (4 * 64), -100);
-	b3.initialize(position, size, "../../../lab2/textures/facade1.jpg", 4);
-	buildings.push_back(b3);
-	
-	Building b4;
-	position = glm::vec3(-300, -473 + (4 * 64), 28);
-	b4.initialize(position, size, "../../../lab2/textures/facade1.jpg", 4);
-	buildings.push_back(b4);
-
-	size = glm::vec3(64, 2 * 64, 64);
-	Building b5;
-	position = glm::vec3(-300, -473 + (2 * 64), 200);
-	b5.initialize(position, size, "../../../lab2/textures/facade3.jpg", 2);
-	buildings.push_back(b5);
-
-	Building b6;
-	position = glm::vec3(-300, -473 + (2 * 64), 328);
-	b6.initialize(position, size, "../../../lab2/textures/facade3.jpg", 2);
-	buildings.push_back(b6);
 
 	//skybox-------------------------------------
-	glm::vec3 skyboxScale(30,30,30); // Add margin
+	glm::vec3 skyboxScale(30, 30, 30); // Add margin
 	skyBox skybox;
 	skybox.initialize(glm::vec3(0, 0, 0), glm::vec3(1, 1, 1), "../../../lab2/textures/sky.png", 1);
-	//--------------------------------------------idk
-	Island island;
-	island.initialize(glm::vec3(0, 0, 0), glm::vec3(20, 20, 20), "../../../lab2/textures/facade1.jpg", "../../../lab2/test.obj");
-	Cloud cloud;
-	cloud.initialize(glm::vec3(200, 200, 200), glm::vec3(5, 5, 5), "../../../lab2/textures/facade1.jpg", "../../../lab2/cloud.obj");
-	Surface surface;
-	surface.initialize(glm::vec3(0, 3, 0), glm::vec3(20, 20, 20), "../../../lab2/textures/facade1.jpg", "../../../lab2/testsurface.obj");
-	Cloud spire;
-	spire.initialize(glm::vec3(250, -400, 1200), glm::vec3(5, 10, 5), "../../../lab2/textures/facade1.jpg", "../../../lab2/spire.obj");
+
+
+	std::vector<Scene> scenes;
+	std::vector<Point2D> middlePoints;
+
+	int startx = -6000;
+	int startz = -6000;
+	for (int i = 0; i < 3; i++) {
+		for (int j = 0; j < 3; j++) {
+			std::cout << i * 6000 + startx << j * 6000 + startz << std::endl;
+			Scene scene;
+			scene.initialize(glm::vec3(i * 6000+startx, 0, j * 6000+startz));
+			scenes.push_back(scene);
+			Point2D point;
+			point.x = i * 6000 + startx;
+			point.z = j * 6000 + startz;
+			middlePoints.push_back(point);
+		}
+	
+	}
 
 	// Camera setup
-    eye_center.y = viewDistance * cos(viewPolar);
-    eye_center.x = viewDistance * cos(viewAzimuth);
-    eye_center.z = viewDistance * sin(viewAzimuth);
+	eye_center = glm::vec3(0.0f, 0.0f, 3000.0f);
+	lookat = glm::vec3(0.0f, 0.0f, 0.0f); // Assuming the camera looks at the origin
+	viewDistance = 3000.0f; // Update the viewDistance to match
 
 	glm::mat4 viewMatrix, projectionMatrix;
     glm::float32 FoV = 45;
 	glm::float32 zNear = 0.1f;
-	glm::float32 zFar = 5000.0f;
+	glm::float32 zFar = 6000.0f;
 	projectionMatrix = glm::perspective(glm::radians(FoV), 4.0f / 3.0f, zNear, zFar);
 	std::cout << "Initial lookat: (" << lookat.x << ", " << lookat.y << ", " << lookat.z << ")\n";
+
+	int currentMinX = -3000;
+	int currentMaxX = 3000;
+	int currentMaxZ = 3000;
+	int currentMinZ = -3000;
 
 	do
 	{
@@ -1463,9 +1364,10 @@ int main(void)
 		// Print updated lookat coordinates only if it has changed
 		if (lookat != lastLookat)
 		{
-			std::cout << "Updated lookat: (" << lookat.x << ", " << lookat.y << ", " << lookat.z << ")\n";
+		//	std::cout << "Updated lookat: (" << lookat.x << ", " << lookat.y << ", " << lookat.z << ")\n";
 			lastLookat = lookat;
 		}
+
 		viewMatrix = glm::lookAt(eye_center, lookat, up);
 
 		glm::mat4 vp = projectionMatrix * viewMatrix;
@@ -1478,30 +1380,81 @@ int main(void)
 		skybox.render(vpSkybox);
 		glDepthMask(GL_TRUE);
 		glDepthFunc(GL_LESS);
-		island.render(vp);
-		surface.render(vp);
-		spire.render(vp);
-		//cloud.render(vp);
-		for (size_t i = 0; i < buildings.size(); ++i) {
-			buildings[i].render(vp);
+		
+		if (eye_center.x > currentMaxX) {
+			for (size_t i = 0; i < middlePoints.size(); ++i) {
+				if (middlePoints[i].x == currentMinX-3000) {
+					middlePoints[i].x = currentMaxX+9000;
+					scenes[i].cleanup();
+					Scene scene;
+					std::cout << middlePoints[i].x << std::endl;
+					scene.initialize(glm::vec3(middlePoints[i].x, 0, middlePoints[i].z));
+					scenes[i] = scene;
+				}
+			}
+			currentMaxX += 6000;
+			currentMinX += 6000;
 		}
-		glm::mat4 mvp = projectionMatrix * viewMatrix; // Replace with your MVP calculation
-		model.render(mvp);
+		else if (eye_center.x < currentMinX) {
+			for (size_t i = 0; i < middlePoints.size(); ++i) {
+				if (middlePoints[i].x == currentMaxX + 3000) {
+					middlePoints[i].x = currentMinX - 9000;
+					scenes[i].cleanup();
+					Scene scene;
+					scene.initialize(glm::vec3(middlePoints[i].x, 0, middlePoints[i].z));
+					scenes[i] = scene;
+					std::cout << middlePoints[i].x << std::endl;  // Exited to the right (positive X direction)
+				}
+			}
+			currentMaxX -= 6000;
+			currentMinX -= 6000;
+		}
+		else if (eye_center.z > currentMaxZ) {
+			for (size_t i = 0; i < middlePoints.size(); ++i) {
+				if (middlePoints[i].z == currentMinZ - 3000) {
+					middlePoints[i].x = currentMaxZ + 9000;
+					scenes[i].cleanup();
+					Scene scene;
+					std::cout << middlePoints[i].z << std::endl;
+					scene.initialize(glm::vec3(middlePoints[i].x, 0, middlePoints[i].z));
+					scenes[i] = scene;
+				}
+			}
+			currentMaxZ += 6000;
+			currentMinZ += 6000;
+		}
+		else if (eye_center.z < currentMinZ) {
+			for (size_t i = 0; i < middlePoints.size(); ++i) {
+				if (middlePoints[i].z == currentMaxZ + 3000) {
+					middlePoints[i].z = currentMinZ - 9000;
+					scenes[i].cleanup();
+					Scene scene;
+					scene.initialize(glm::vec3(middlePoints[i].x, 0, middlePoints[i].z));
+					scenes[i] = scene;
+					std::cout << middlePoints[i].z << std::endl;  // Exited to the right (positive X direction)
+				}
+			}
+			currentMaxZ -= 6000;
+			currentMinZ -= 6000;
+		}
+		//else {
+		//	//std::cout << "in" << std::endl;  // Exited to the right (positive X direction)
+		//} 
 		// Swap buffers
+		for (size_t i = 0; i < scenes.size(); ++i) {
+			scenes[i].render(vp);
+		}
 		glfwSwapBuffers(window);
 		glfwPollEvents();
 
 	} // Check if the ESC key was pressed or the window was closed
 	while (!glfwWindowShouldClose(window));
-	island.cleanup();
-	for (size_t i = 0; i < buildings.size(); ++i) {
-		buildings[i].cleanup();
+
+	for (size_t i = 0; i < scenes.size(); ++i) {
+		scenes[i].cleanup();
 	}
-	cloud.cleanup();
-	surface.cleanup();
 	skybox.cleanup();
-	spire.cleanup();
-	model.cleanup();
+	//roof.cleanup();
 	// Close OpenGL window and terminate GLFW
 	glfwTerminate();
 
@@ -1510,7 +1463,7 @@ int main(void)
 
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mode)
 {
-	static float movementSpeed = 20.0f; // Movement speed for WASD
+	static float movementSpeed = 40.0f; // Movement speed for WASD
 	static float rotationSpeed = 0.05f; // Rotation speed for arrow keys
 
 	if ((action == GLFW_REPEAT || action == GLFW_PRESS))
@@ -1543,20 +1496,25 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 			lookat = eye_center + glm::vec3(x, y, z);
 		}
 
-		// Reset camera
-		if (key == GLFW_KEY_R && action == GLFW_PRESS)
-		{
-			viewAzimuth = 0.f;
-			viewPolar = 0.f;
-			eye_center = glm::vec3(0.0f, 0.0f, viewDistance);
-			lookat = glm::vec3(0, 0, 0);
-			std::cout << "Camera Reset.\n";
-		}
+		//// Reset camera
+		//if (key == GLFW_KEY_R && action == GLFW_PRESS)
+		//{
+		//	viewAzimuth = 0.f;
+		//	viewPolar = 0.f;
+		//	eye_center = glm::vec3(0.0f, 0.0f, viewDistance);
+		//	lookat = glm::vec3(0, 0, 0);
+		//	std::cout << "Camera Reset.\n";
+		//}
 
 		// Exit application
 		if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
 		{
 			glfwSetWindowShouldClose(window, GL_TRUE);
 		}
+		std::cout << "Camera location: ("
+			<< eye_center.x << ", "
+			<< eye_center.y << ", "
+			<< eye_center.z << ")"
+			<< std::endl;
 	}
 }

@@ -598,9 +598,9 @@ struct MyBot {
 
 	void render(glm::mat4 cameraMatrix) {
 		glUseProgram(programID);
-
-		// Set camera
-		glm::mat4 mvp = cameraMatrix;
+		glm::vec3 position = glm::vec3(-500.0f, -470.0f, 1000.0f); // Modify these values to move the bot
+		glm::mat4 modelMatrix = glm::translate(glm::mat4(1.0f), position);
+		glm::mat4 mvp = cameraMatrix * modelMatrix;
 		glUniformMatrix4fv(mvpMatrixID, 1, GL_FALSE, &mvp[0][0]);
 
 		// -----------------------------------------------------------------
@@ -2067,6 +2067,7 @@ struct Scene {
 	Surface surface;
 	Cloud spire;
 	Tree tree;
+	Tree tree2;
 	Rock rock;
 	// Initialize all elements of the scene
 	void initialize(const glm::vec3& offset) {
@@ -2092,7 +2093,9 @@ struct Scene {
 			}
 		}
 		rock.initialize(offset + glm::vec3(0, -400, -200), glm::vec3(10, 10, 10), "../../../lab2/rock.obj");
-		tree.initialize(offset + glm::vec3(200, -400, 1100), glm::vec3(10, 10, 10), "../../../lab2/tree.obj");
+		tree.initialize(offset + glm::vec3(400, -350, 1000), glm::vec3(10, 10, 10), "../../../lab2/tree.obj");
+		tree2.initialize(offset + glm::vec3(200, -350, -200), glm::vec3(10, 10, 10), "../../../lab2/tree.obj");
+
 		// Initialize the island
 		island.initialize(offset, glm::vec3(20, 20, 20), "../../../lab2/textures/facade1.jpg", "../../../lab2/test.obj");
 
@@ -2119,6 +2122,7 @@ struct Scene {
 		surface.render(vp);
 		spire.render(vp);
 		tree.render(vp);
+		tree2.render(vp);
 		rock.render(vp); 
 	}
 
@@ -2137,6 +2141,7 @@ struct Scene {
 		spire.cleanup();
 		tree.cleanup();
 		rock.cleanup();
+		tree2.cleanup();
 	}
 };
 struct Point2D {
@@ -2370,7 +2375,7 @@ int main(void)
 
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mode)
 {
-	static float movementSpeed = 40.0f; // Movement speed for WASD
+	static float movementSpeed = 20.0f; // Movement speed for WASD
 	static float rotationSpeed = 0.05f; // Rotation speed for arrow keys
 
 	if ((action == GLFW_REPEAT || action == GLFW_PRESS))

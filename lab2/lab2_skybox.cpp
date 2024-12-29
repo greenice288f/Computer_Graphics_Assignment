@@ -1679,7 +1679,10 @@ struct Surface {
 
 		// Load Texture
 		textureID = LoadTextureTileBox(texturePath);
-
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST); // Changed to NEAREST
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST); // Changed to NEAREST
 
 		// Load Shaders
 		programID = LoadShadersFromFile("../../../lab2/shaders/island.vert", "../../../lab2/shaders/island.frag"); // Assuming you have these shaders
@@ -2339,11 +2342,9 @@ int main(void)
 			time += deltaTime * playbackSpeed;
 			bot.update(time);
 		}
-		//glDepthFunc(GL_LEQUAL);
-		//glDepthMask(GL_FALSE);
+
 		bot.render(vp);
-		//glDepthMask(GL_TRUE);
-		//glDepthFunc(GL_LESS);
+
 
 		frames++;
 		fTime += deltaTime;

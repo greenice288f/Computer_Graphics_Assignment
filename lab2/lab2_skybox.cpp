@@ -2213,7 +2213,6 @@ int main(void)
 	int startz = -6000;
 	for (int i = 0; i < 3; i++) {
 		for (int j = 0; j < 3; j++) {
-			std::cout << i * 6000 + startx << j * 6000 + startz << std::endl;
 			Scene scene;
 			scene.initialize(glm::vec3(i * 6000+startx, 0, j * 6000+startz));
 			scenes.push_back(scene);
@@ -2277,7 +2276,7 @@ int main(void)
 					middlePoints[i].x = currentMaxX+9000;
 					scenes[i].cleanup();
 					Scene scene;
-					std::cout << middlePoints[i].x << std::endl;
+					//std::cout << middlePoints[i].x << std::endl;
 					scene.initialize(glm::vec3(middlePoints[i].x, 0, middlePoints[i].z));
 					scenes[i] = scene;
 				}
@@ -2293,7 +2292,7 @@ int main(void)
 					Scene scene;
 					scene.initialize(glm::vec3(middlePoints[i].x, 0, middlePoints[i].z));
 					scenes[i] = scene;
-					std::cout << middlePoints[i].x << std::endl;  // Exited to the right (positive X direction)
+					//std::cout << middlePoints[i].x << std::endl;  // Exited to the right (positive X direction)
 				}
 			}
 			currentMaxX -= 6000;
@@ -2305,7 +2304,7 @@ int main(void)
 					middlePoints[i].x = currentMaxZ + 9000;
 					scenes[i].cleanup();
 					Scene scene;
-					std::cout << middlePoints[i].z << std::endl;
+					//std::cout << middlePoints[i].z << std::endl;
 					scene.initialize(glm::vec3(middlePoints[i].x, 0, middlePoints[i].z));
 					scenes[i] = scene;
 				}
@@ -2321,7 +2320,7 @@ int main(void)
 					Scene scene;
 					scene.initialize(glm::vec3(middlePoints[i].x, 0, middlePoints[i].z));
 					scenes[i] = scene;
-					std::cout << middlePoints[i].z << std::endl;  // Exited to the right (positive X direction)
+					//std::cout << middlePoints[i].z << std::endl;  // Exited to the right (positive X direction)
 				}
 			}
 			currentMaxZ -= 6000;

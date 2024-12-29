@@ -1,0 +1,22 @@
+# Blender 4.3.2 MTL File: 'untitled.blend'
+# www.blender.org
+
+newmtl base
+Ns 250.000000
+Ka 1.000000 1.000000 1.000000
+Ks 0.000000 0.000000 0.000000
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+d 1.000000
+illum 1
+map_Kd C:\Users\balin\Desktop\graphProject\lab2\lab2\bg.png
+
+newmtl grass
+Ns 250.000000
+Ka 1.000000 1.000000 1.000000
+Ks 0.000000 0.000000 0.000000
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+d 1.000000
+illum 1
+map_Kd C:\Users\balin\Desktop\graphProject\lab2\lab2\bg.png
